@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# What stays OUT of the release tarball (gitignore syntax; read by krankerl and by
+# `make appstore`). Everything needed at runtime stays in: appinfo, lib, templates,
+# img, l10n, the built js/ and css/.
+/.git
+/.github
+/.gitignore
+/.nextcloudignore
+/.php-cs-fixer.dist.php
+/.php-cs-fixer.cache
+/.zcode
+/DESIGN.md
+/build
+/composer.json
+/composer.lock
+/flake.lock
+/flake.nix
+/krankerl.toml
+/LICENSES
+/Makefile
+/node_modules
+/package.json
+/package-lock.json
+/playwright
+/playwright-report
+/playwright.config.ts
+/psalm.xml
+/rename.sh
+/README.md
+/src
+/test-results
+/tests
+/vendor
+/vite.config.js

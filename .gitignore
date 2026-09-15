@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+node_modules/
+test-results/
+playwright-report/
+# Vite build output; the plain-JavaScript files it replaces are tracked.
+js/*.mjs
+js/*.mjs.map
+js/*.license
+css/*.chunk.css
+vendor/
+.php-cs-fixer.cache
+composer.lock
+build/
+# Nix / editor tooling
+.zcode/
+result
