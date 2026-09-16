@@ -148,9 +148,13 @@ class SqlPlatform implements IFullTextSearchPlatform {
 
 				if ($row->contentExtracted) {
 					$index->setStatus(IIndex::INDEX_CONTENT);
-				} else {
+				}
+				// Not an else: a budget cut extracts content and flags the
+				// document at the same time (DESIGN.md, "Open issue:
+				// representing partial extraction").
+				if ($row->contentError !== null) {
 					$index->addError(
-						$row->contentError ?? 'content not extracted',
+						$row->contentError,
 						'',
 						$row->contentErrorSeverity ?: IIndex::ERROR_SEV_1,
 					);

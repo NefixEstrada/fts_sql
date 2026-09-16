@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace OCA\FtsSql\Service;
 
+use OCA\FtsSql\Extraction\ExtractionCause;
 use OCA\FtsSql\Model\DocumentAccess;
 use OCA\FtsSql\Model\IndexRow;
 use OCP\FullTextSearch\Model\IIndex;
@@ -61,6 +62,12 @@ final class IndexMappingService {
 	 * access and tags, without content — with the error and its severity;
 	 * the row is never refused over its content.
 	 *
+	 * A cause on the result is always reported. The budget cut is the one
+	 * cause that also extracts: its text is recovered content, so the row
+	 * carries content and the flag together (DESIGN.md, "Open issue:
+	 * representing partial extraction" — index what was recovered, flag the
+	 * document, keep the per-cause message in addError()).
+	 *
 	 * @return array{bool, ?string, ?string, int} extracted?, content, error, severity
 	 */
 	private static function extractContent(IIndexDocument $document, int $budget): array {
@@ -81,17 +88,15 @@ final class IndexMappingService {
 		// The files provider sets the title to the path, which is where the
 		// extension is read from.
 		$extension = pathinfo($document->getTitle(), PATHINFO_EXTENSION);
-		$content = ExtractionService::extract($bytes, $extension, $budget);
-		if ($content === null) {
-			return [
-				false,
-				null,
-				sprintf('the "%s" format is not extracted in this milestone: indexed on title, access and tags only', $extension),
-				IIndex::ERROR_SEV_1,
-			];
-		}
+		$result = ExtractionService::extract($bytes, $extension, $budget);
 
-		return [true, $content, null, 0];
+		if ($result->cause === null) {
+			return [true, $result->text, null, 0];
+		}
+		if ($result->cause === ExtractionCause::BudgetCut) {
+			return [true, $result->text, $result->message, IIndex::ERROR_SEV_1];
+		}
+		return [$result->text !== null, $result->text, $result->message, IIndex::ERROR_SEV_1];
 	}
 
 	/**

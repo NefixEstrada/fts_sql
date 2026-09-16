@@ -9,10 +9,11 @@
 	<id>fts_sql</id>
 	<name>FTS SQL</name>
 	<summary>Full text search over the database Nextcloud already runs</summary>
-	<description><![CDATA[A full text search platform for the fulltextsearch framework that indexes into the
+  <description><![CDATA[A full text search platform for the fulltextsearch framework that indexes into the
 database the Nextcloud instance already runs — PostgreSQL, MySQL/MariaDB or SQLite — so nobody has to
-operate Elasticsearch to get full text search. Plain text is indexed as of Milestone 1; office formats and
-PDF arrive in later milestones, still with no external service and no external binary.]]></description>
+operate Elasticsearch to get full text search. Plain text and the OOXML and ODF office formats (.docx,
+.xlsx, .pptx, .odt, .ods, .odp) are indexed by their body text, extracted in pure PHP; PDF and the legacy
+binary Office formats arrive in later milestones, still with no external service and no external binary.]]></description>
 	<version>1.0.0</version>
 	<licence>agpl</licence>
 	<author>Néfix Estrada</author>

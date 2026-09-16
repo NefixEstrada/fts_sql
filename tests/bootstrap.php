@@ -15,6 +15,12 @@ declare(strict_types=1);
 //    database and \Test\TestCase. This is how the "integration" suite runs.
 // 2. Standalone, after `composer install`: only the OCP interfaces from nextcloud/ocp
 //    are available, which is enough for the "unit" suite.
+//
+// The test suites' own namespaces do not follow PSR-4 (tests/unit against
+// Tests\Unit), which is fine because phpunit loads test files by directory
+// scan; the shared fixture builder is not scanned, so it is loaded here.
+require_once __DIR__ . '/Fixtures.php';
+
 $serverBootstrap = __DIR__ . '/../../../tests/bootstrap.php';
 if (file_exists($serverBootstrap)) {
 	require_once $serverBootstrap;

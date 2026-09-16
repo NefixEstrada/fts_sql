@@ -12,6 +12,7 @@ namespace OCA\FtsSql\Tests\Unit\Service;
 
 use OCA\FtsSql\Exceptions\AccessIsEmpty;
 use OCA\FtsSql\Service\IndexMappingService;
+use OCA\FtsSql\Tests\Fixtures;
 use OCP\FullTextSearch\Model\IDocumentAccess;
 use OCP\FullTextSearch\Model\IIndex;
 use OCP\FullTextSearch\Model\IIndexDocument;
@@ -19,10 +20,12 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * IndexMappingService::map against DESIGN.md's "Worked example: indexing
- * one document", plus the two ways the content can fail to arrive — a
- * base64 that does not decode (a provider bug, ERROR_SEV_3) and a format
- * this milestone does not extract (expected, ERROR_SEV_1) — both of which
- * still yield a full row.
+ * one document", plus the ways the content can fail to arrive — a base64
+ * that does not decode (a provider bug, ERROR_SEV_3) and a format with no
+ * extractor yet (expected, ERROR_SEV_1) — and, from Milestone 2, the
+ * documents that arrive: a .docx on its body text, a password-protected
+ * one without content, and a budget cut that extracts and flags together.
+ * All of them still yield a full row.
  */
 class IndexMappingServiceTest extends TestCase {
 
@@ -77,8 +80,8 @@ class IndexMappingServiceTest extends TestCase {
 
 	public function testADeniedExtensionIsIndexedWithoutContent(): void {
 		$document = self::document(
-			title: 'Escola/Sortida al Museu de Ciències.docx',
-			content: base64_encode('sortida al museu'),
+			title: 'Escola/Sortida al Museu de Ciències.pdf',
+			content: base64_encode('%PDF-1.7'),
 			encoded: IIndexDocument::ENCODED_BASE64,
 			access: self::access(owner: 'biel'),
 		);
@@ -88,9 +91,44 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertFalse($row->contentExtracted);
 		$this->assertNull($row->content);
 		$this->assertNotNull($row->contentError);
-		$this->assertStringContainsString('docx', $row->contentError);
+		$this->assertStringContainsString('pdf', $row->contentError);
 		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
-		$this->assertSame('Escola/Sortida al Museu de Ciències.docx', $row->title);
+		$this->assertSame('Escola/Sortida al Museu de Ciències.pdf', $row->title);
+	}
+
+	public function testADocxIsIndexedOnItsBodyText(): void {
+		$document = self::document(
+			title: 'Escola/Sortida al Museu de Ciències.docx',
+			content: base64_encode(Fixtures::docx(
+				'<w:p><w:r><w:t>sortida al museu de ciències</w:t></w:r></w:p>',
+			)),
+			encoded: IIndexDocument::ENCODED_BASE64,
+			access: self::access(owner: 'biel'),
+		);
+
+		$row = IndexMappingService::map($document, 2097152);
+
+		$this->assertTrue($row->contentExtracted);
+		$this->assertSame("sortida al museu de ciències\n", $row->content);
+		$this->assertNull($row->contentError);
+		$this->assertSame(0, $row->contentErrorSeverity);
+	}
+
+	public function testAPasswordProtectedDocxIsIndexedWithoutContent(): void {
+		$document = self::document(
+			title: 'Escola/Sortida al Museu de Ciències.docx',
+			content: base64_encode(Fixtures::ole()),
+			encoded: IIndexDocument::ENCODED_BASE64,
+			access: self::access(owner: 'biel'),
+		);
+
+		$row = IndexMappingService::map($document, 2097152);
+
+		$this->assertFalse($row->contentExtracted);
+		$this->assertNull($row->content);
+		$this->assertNotNull($row->contentError);
+		$this->assertStringContainsString('password-protected', $row->contentError);
+		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
 	}
 
 	public function testUnencodedContentIsTakenAsTheBytes(): void {
@@ -101,11 +139,16 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertNull($row->contentError);
 	}
 
-	public function testTheBudgetCutsTheContent(): void {
+	public function testTheBudgetCutsTheContentAndFlagsTheDocument(): void {
 		$row = IndexMappingService::map(self::document(title: 'notes.txt', content: 'aa bb cc'), 5);
 
+		// The budget cut extracts and flags at the same time: the content
+		// is what survived, and the error says it is not the whole document.
 		$this->assertTrue($row->contentExtracted);
 		$this->assertSame('aa', $row->content);
+		$this->assertNotNull($row->contentError);
+		$this->assertStringContainsString('budget', $row->contentError);
+		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
 	}
 
 	public function testAnEmptyOwnerBecomesNullInTheRow(): void {
