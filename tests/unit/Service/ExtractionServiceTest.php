@@ -34,7 +34,7 @@ class ExtractionServiceTest extends TestCase {
 	}
 
 	public function testNotYetExtensionsAreAReportedCause(): void {
-		foreach (['pdf', 'zip', 'svg', 'wav'] as $extension) {
+		foreach (['epub', 'zip', 'svg', 'wav'] as $extension) {
 			$result = ExtractionService::extract('sortida al museu', $extension, 100);
 
 			$this->assertSame(ExtractionCause::Unsupported, $result->cause, $extension);
@@ -44,7 +44,7 @@ class ExtractionServiceTest extends TestCase {
 	}
 
 	public function testTheNotYetListIsMatchedLowercased(): void {
-		$this->assertSame(ExtractionCause::Unsupported, ExtractionService::extract('sortida al museu', 'PDF', 100)->cause);
+		$this->assertSame(ExtractionCause::Unsupported, ExtractionService::extract('sortida al museu', 'EPUB', 100)->cause);
 		$this->assertSame(ExtractionCause::Unsupported, ExtractionService::extract('sortida al museu', 'Zip', 100)->cause);
 	}
 

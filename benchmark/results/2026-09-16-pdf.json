@@ -1,0 +1,121 @@
+{
+  "stage": "extraction+pdf",
+  "date": "2026-09-16",
+  "php": "8.2.33",
+  "budget_bytes": 2097152,
+  "scenarios": {
+    "docx_corpus_batch": {
+      "docs": 5001,
+      "off_shape": 0,
+      "total_ms": 3531,
+      "per_doc_ms": 0.706,
+      "peak_bytes": 2097152
+    },
+    "docx_in_budget": {
+      "file_bytes": 504337,
+      "text_bytes": 1048477,
+      "cause": "complete",
+      "ms": 172,
+      "peak_bytes": 5615616
+    },
+    "docx_over_budget": {
+      "file_bytes": 1495905,
+      "text_bytes": 2097147,
+      "cause": "budget cut",
+      "ms": 618,
+      "peak_bytes": 14716928
+    },
+    "docx_beyond_cap": {
+      "file_bytes": 4010439,
+      "text_bytes": 0,
+      "cause": "parser gave up",
+      "ms": 319,
+      "peak_bytes": 2097152
+    },
+    "xlsx_in_budget": {
+      "file_bytes": 493617,
+      "text_bytes": 1047635,
+      "cause": "complete",
+      "ms": 116,
+      "peak_bytes": 4194304
+    },
+    "odt_in_budget": {
+      "file_bytes": 470934,
+      "text_bytes": 1047822,
+      "cause": "complete",
+      "ms": 67,
+      "peak_bytes": 2097152
+    },
+    "pdf_in_budget": {
+      "file_bytes": 419123,
+      "text_bytes": 1045574,
+      "cause": "complete",
+      "ms": 262,
+      "peak_bytes": 2097152
+    },
+    "pdf_encrypted_in_budget": {
+      "file_bytes": 419379,
+      "text_bytes": 1045574,
+      "cause": "complete",
+      "ms": 522,
+      "peak_bytes": 2097152
+    },
+    "pdf_iso_reference": {
+      "file_bytes": 22491828,
+      "text_bytes": 2097143,
+      "cause": "budget cut",
+      "ms": 10086,
+      "peak_bytes": 70746112
+    }
+  },
+  "route_decision": {
+    "issue": "DESIGN.md \"Open issue: the PDF route\"",
+    "reference_file": "ISO 32000-1 (PDF32000_2008.pdf), 21.45 MiB, 756 pages, classic xref, RC4 V1/R3 empty user password",
+    "smalot_pdfparser_v2_12_5": {
+      "parse_only": {
+        "ms": 6000,
+        "peak_bytes": 731906048,
+        "note": "fatal at the 512 MiB floor inside RawDataParser, before any text"
+      },
+      "whole_gettext": "TypeError (null font in PDFObject::getTJUsingFontFallback) after the 697.5 MiB parse",
+      "page_bounded": "same TypeError; the parse precedes any page, so bounding pages caps neither time nor memory",
+      "config_knobs": "decodeMemoryLimit bounds decompression only, not the object graph"
+    },
+    "smalot_pdfparser_design_measurement": {
+      "seconds": 87.84,
+      "peak_bytes": 738197504
+    },
+    "own_extractor": {
+      "file_bytes": 22491828,
+      "text_bytes": 2097143,
+      "cause": "budget cut",
+      "ms": 10086,
+      "peak_bytes": 70746112,
+      "observed_ms_across_runs": [
+        6894,
+        7120,
+        10086
+      ],
+      "note": "the 10 s wall-clock budget of DESIGN.md's hostile posture is the binding constraint on this worst-case file under load; the cut is indexed on what survived"
+    },
+    "resolution": "option (b): a page-bounded text extractor of our own; no library enters, the scoping tooling stays proven for Milestone 4"
+  },
+  "container_run": {
+    "where": "nextcloud-docker-dev master-stable34-1 (the CI-equivalent PHP)",
+    "pdf_iso_reference": {
+      "ms": 10568,
+      "text_bytes": 590848,
+      "peak_bytes": 64984,
+      "cause": "parser gave up",
+      "note": "the wall-clock budget, not the content budget, is what stops the walk on this host: the container PHP runs ~10x slower per operation than the dev shell, so the 756-page reference yields its first ~577 KiB within the designed 10 s; the dev shell reaches the full 2 MiB budget cut in ~7 s. Either bound is the designed behaviour — a search finds what survived."
+    },
+    "pdf_in_budget": {
+      "ms": 1710,
+      "cause": "complete"
+    },
+    "pdf_encrypted_in_budget": {
+      "ms": 2415,
+      "cause": "complete"
+    }
+  }
+}

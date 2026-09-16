@@ -249,7 +249,7 @@ Delivered with the project's own `XMLReader` extractors: PhpSpreadsheet measured
 
 Observable state: bundled Composer dependencies live under the app's own namespace, rewritten by `php-scoper` — the pattern `fulltextsearch_elasticsearch` already uses, because two apps bundling different versions of the same namespace means whichever autoloader registers first wins, silently; then `.pdf` is found by its body text.
 
-The order inside the milestone is fixed: retrofitting namespace prefixing after libraries are in is worse than doing it once. The PDF route itself is not fixed; see the first open issue.
+The order inside the milestone is fixed: retrofitting namespace prefixing after libraries are in is worse than doing it once. The PDF route resolved to the project's own extractor — see Resolved issues.
 
 ### Milestone 4: legacy binary Office
 
@@ -519,7 +519,7 @@ The one dependency that shapes everything, through `IFullTextSearchPlatform` and
 
 ### Runtime libraries: none in Milestone 1
 
-Milestone 3 adds `smalot/pdfparser` (LGPL-3.0) and Milestone 4 the PhpOffice readers (LGPL-3.0, PhpSpreadsheet MIT), all compatible with AGPL-3.0-or-later and all rewritten under the app's namespace by `php-scoper`.
+Milestone 3 adds none either — its PDF route resolved to the project's own extractor — so the php-scoper tooling waits, proven by its self-test, for Milestone 4's PhpOffice readers (LGPL-3.0, PhpSpreadsheet MIT), all compatible with AGPL-3.0-or-later and to be rewritten under the app's namespace by `php-scoper`.
 
 ### Verification: two tiers, four engines
 
@@ -566,16 +566,6 @@ AGPL-3.0-or-later, REUSE-compliant. The libraries the later milestones bundle ar
 
 ## Open issues
 
-### Open issue: the PDF route
-
-**Problem.** `smalot/pdfparser` is the planned library and the weakest claim in this design: on a real 756-page PDF (ISO 32000-1, 21.45 MiB) it took 87.84 s and 704.3 MiB of PHP memory — a hard fatal at Nextcloud's 512 MB floor — and crashed with a `TypeError` on the same file encrypted, where `pdftotext` took 4.65 s and 3.4 MiB. It handled the three hand-built samples the recommendation was first made on, the largest 1,111 bytes.
-
-**Options.** (a) Keep the library and extract page by page, stopping at the character budget — caps both time and memory, unmeasured. (b) Write a page-bounded text extractor of our own — rejected once already as an inference from a scope rule that turned out not to exist. (c) Skip PDF — rejected by the settled scope.
-
-**Proposed solution.** (a), conditional on a measurement.
-
-**Next step.** Measure page-bounded extraction on the same PDF before Milestone 3 is designed in detail. Author.
-
 ### Open issue: where extraction plugs in
 
 **Problem.** `indexDocument()` receives the whole file base64-encoded, so extracting there costs 2.33× the file size in memory and needs a temp file, because `ZipArchive` cannot open a container held in a string; the `Files_FullTextSearch.onFileIndexing` event hands a listener a real `Node` to stream from, but only fires for the files provider, only with `files_fulltextsearch` installed, and only inside its own size gates.
@@ -616,14 +606,6 @@ AGPL-3.0-or-later, REUSE-compliant. The libraries the later milestones bundle ar
 
 **Next step.** Add the interleaved harness to the integration tier against MariaDB 11.4 and MySQL 8.4. Author.
 
-### Open issue: `ext-iconv` for `smalot/pdfparser`
-
-**Problem.** The package declares `ext-iconv`, which is not one of Nextcloud's required modules.
-
-**Options.** (a) Declare it in the manifest and let the installer refuse hosts without it. (b) Patch it out of the scoped copy, if the package's use of it is replaceable by `mbstring`.
-
-**Next step.** Read what the package uses `iconv` for, during Milestone 3. Author.
-
 ### Open issue: extraction in the benchmark
 
 **Problem.** The corpus feeds text straight to the engines, so extraction is measured by one-off scripts. The only memory ceiling measured is PhpSpreadsheet's; PDF, `.doc` and `.ppt` are unmeasured, and `.xls` needs re-measuring once `setReadFilter()` drives it. Query sets built on assumptions have already been found to drift from what the engines see.
@@ -637,6 +619,10 @@ AGPL-3.0-or-later, REUSE-compliant. The libraries the later milestones bundle ar
 ## Resolved issues
 
 - **EPUB dropped from Milestone 2.** The draft listed `.epub` beside the office formats — a zip of XML that needs no library, like they do. Dropped before the first extractor was written: not needed here. An `.epub` is indexed on title, access and tags with the unsupported cause, like PDF and `.zip`; and the container-plus-XMLReader shape it would have used is already proven by OOXML and ODF, should it ever come back.
+
+- **The PDF route is our own extractor, not the library** (the measurement the open issue asked for, taken 2026-09-16; kept in `benchmark/results/2026-09-16-pdf.json`). `smalot/pdfparser` 2.12.5 on the reference file — the 21.45 MiB, 756-page ISO 32000-1 — spends **6.00 s and 697.5 MiB of peak in `parseFile` alone**, fatal at the 512 MB floor before any text exists (the design's earlier measurement: 87.84 s and 704.3 MiB end to end), and its page-bounded and whole-document reads then crash with an uncaught `TypeError` (a null font in `PDFObject::getTJUsingFontFallback`); its only bound, `decodeMemoryLimit`, caps decompression, not the object graph. Option (a) refuted on its own premise — page bounding caps neither time nor memory, because the parse precedes any page — and option (b), whose earlier rejection was already recorded here as an inference from a scope rule that turned out not to exist, is the route: `lib/Extraction/Pdf/` reads the cross-reference index and then, per page, only what the page names, at **~7 s and a ~70 MiB marginal peak** on the same file, budget-cut as designed. The file itself turned out to carry the standard security handler with an empty user password, so the extractor decrypts that one class (RC4 revisions 2–4 and AES-128, the shape of every permission-restricted download); AES-256 revisions and real passwords stay the Encrypted cause.
+
+- **`ext-iconv` is moot: no library enters the app.** The reading the open issue asked for, for the record: `smalot/pdfparser` uses `iconv()` at exactly one call site (`Font.php`, decoding non-Unicode font encodings with `//TRANSLIT//IGNORE`, which `mbstring` does not replicate), so option (a) — declaring it in the manifest — would have been the answer. With the library gone, nothing in the app depends on `iconv`, `intl` or any module Nextcloud does not already require; the bundling tooling stays proven by its self-test, ready for Milestone 4's PhpOffice readers.
 
 ## Alternatives considered
 

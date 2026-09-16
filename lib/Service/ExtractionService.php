@@ -15,6 +15,7 @@ use OCA\FtsSql\Extraction\ExtractionResult;
 use OCA\FtsSql\Extraction\IExtractor;
 use OCA\FtsSql\Extraction\OdfExtractor;
 use OCA\FtsSql\Extraction\OoxmlExtractor;
+use OCA\FtsSql\Extraction\PdfExtractor;
 use OCA\FtsSql\Extraction\TextSink;
 
 /**
@@ -31,12 +32,12 @@ use OCA\FtsSql\Extraction\TextSink;
  */
 final class ExtractionService {
 	/**
-	 * The formats later milestones own (pdf and the legacy binary Office
-	 * formats) plus archives, executables, images and media: never plain
-	 * text, not extracted yet.
+	 * The formats later milestones own (the legacy binary Office
+	 * formats) plus archives, executables, images and media: never
+	 * plain text, not extracted yet.
 	 */
 	public const NOT_EXTRACTED_EXTENSIONS = [
-		'pdf', 'doc', 'xls', 'ppt', 'epub',
+		'doc', 'xls', 'ppt', 'epub',
 		'zip', 'gz', 'tar',
 		'exe', 'bin',
 		'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic',
@@ -141,6 +142,7 @@ final class ExtractionService {
 		return [
 			new OoxmlExtractor(),
 			new OdfExtractor(),
+			new PdfExtractor(),
 		];
 	}
 }

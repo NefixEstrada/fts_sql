@@ -39,6 +39,15 @@ declare(strict_types=1);
  *   xlsx_in_budget      shared strings beside a numeric sheet, the shape
  *                       DESIGN.md's PhpSpreadsheet comparison measured
  *   odt_in_budget       one content.xml walk
+ *   pdf_in_budget       a many-page pdf, flate-compressed, WinAnsi text —
+ *                       the route DESIGN.md's Milestone 3 landed on
+ *   pdf_encrypted_...   the same shape under the standard security handler
+ *                       with an empty user password, the reference file's own
+ *   pdf_iso_reference   the 21.45 MiB, 756-page ISO 32000-1 the route
+ *                       decision measured, when its path is passed:
+ *                       --pdf=/path/to/PDF32000_2008.pdf (the file is not in
+ *                       the repository; the numbers are what the open issue
+ *                       resolved on)
  *
  * Peaks are marginal: memory_reset_peak_usage() before each scenario, the
  * delta of memory_get_peak_usage(true) after. Leaves nothing behind (the
@@ -69,7 +78,19 @@ const EXPECTED = [
 	'docx_beyond_cap' => 'parser gave up',
 	'xlsx_in_budget' => 'complete',
 	'odt_in_budget' => 'complete',
+	'pdf_in_budget' => 'complete',
+	'pdf_encrypted_in_budget' => 'complete',
+	// the reference ISO accepts either designed bound: which of the
+	// budget or the clock bites first depends on the host's speed
+	'pdf_iso_reference' => ['budget cut', 'parser gave up'],
 ];
+
+/**
+ * @param string|list<string> $expected
+ */
+function causeMatches(string $cause, string|array $expected): bool {
+	return is_string($expected) ? $cause === $expected : in_array($cause, $expected, true);
+}
 
 $bodies = corpus();
 echo count($bodies) . " corpus documents loaded\n";
@@ -107,16 +128,19 @@ $scenarios['docx_corpus_batch'] = [
 
 // --- single-file scenarios --------------------------------------------
 foreach ([
-	'docx_in_budget' => ['docx', 1048576],
-	'docx_over_budget' => ['docx', BUDGET * 3 / 2],
-	'docx_beyond_cap' => ['docx', 8388608],
-	'xlsx_in_budget' => ['xlsx', 1048576],
-	'odt_in_budget' => ['odt', 1048576],
-] as $name => [$extension, $textBytes]) {
+	'docx_in_budget' => ['docx', 1048576, false],
+	'docx_over_budget' => ['docx', BUDGET * 3 / 2, false],
+	'docx_beyond_cap' => ['docx', 8388608, false],
+	'xlsx_in_budget' => ['xlsx', 1048576, false],
+	'odt_in_budget' => ['odt', 1048576, false],
+	'pdf_in_budget' => ['pdf', 1048576, false],
+	'pdf_encrypted_in_budget' => ['pdf', 1048576, true],
+] as $name => [$extension, $textBytes, $encrypted]) {
 	$text = textUntil($bodies, (int)$textBytes);
 	$bytes = $extension === 'docx' ? docxBytes(paragraphsOf($text))
 		: ($extension === 'xlsx' ? xlsxBytes(cellStringsOf($text))
-		: odtBytes(paragraphsOf($text)));
+		: ($extension === 'odt' ? odtBytes(paragraphsOf($text))
+		: pdfBytes(paragraphsOf($text), $encrypted)));
 
 	$scenarios[$name] = measure($bytes, $extension);
 	$s = $scenarios[$name];
@@ -129,9 +153,36 @@ foreach ([
 		$s['ms'],
 		kib($s['peak_bytes']),
 	);
-	if ($s['cause'] !== EXPECTED[$name]) {
-		fwrite(STDERR, "UNEXPECTED: $name came out '{$s['cause']}', expected '" . EXPECTED[$name] . "'\n");
+	if (!causeMatches($s['cause'], EXPECTED[$name])) {
+		fwrite(STDERR, "UNEXPECTED: $name came out '{$s['cause']}', expected '" . json_encode(EXPECTED[$name]) . "'\n");
 	}
+}
+
+// --- pdf_iso_reference: the file the route decision measured -----------
+$isoPath = null;
+foreach ($_SERVER['argv'] ?? [] as $arg) {
+	if (str_starts_with((string)$arg, '--pdf=')) {
+		$isoPath = substr((string)$arg, strlen('--pdf='));
+	}
+}
+if ($isoPath !== null && is_file($isoPath)) {
+	$isoBytes = file_get_contents($isoPath) ?: '';
+	$scenarios['pdf_iso_reference'] = measure($isoBytes, 'pdf');
+	$s = $scenarios['pdf_iso_reference'];
+	echo sprintf(
+		"%s: %s file, %s text, %s, %d ms, %s peak\n",
+		'pdf_iso_reference',
+		kib($s['file_bytes']),
+		kib($s['text_bytes']),
+		$s['cause'],
+		$s['ms'],
+		kib($s['peak_bytes']),
+	);
+	if (!causeMatches($s['cause'], EXPECTED['pdf_iso_reference'])) {
+		fwrite(STDERR, "UNEXPECTED: pdf_iso_reference came out '{$s['cause']}', expected '" . json_encode(EXPECTED['pdf_iso_reference']) . "'\n");
+	}
+} else {
+	echo "pdf_iso_reference: skipped (pass --pdf=/path/to/PDF32000_2008.pdf for the reference measurement)\n";
 }
 
 $report = [
@@ -377,6 +428,126 @@ function odtBytes(array $paragraphs): string {
 			. '</manifest:manifest>',
 		'content.xml' => $xml,
 	], 'application/vnd.oasis.opendocument.text');
+}
+
+/**
+ * A many-page pdf: classic cross-reference table, one content stream per
+ * page flate-compressed, WinAnsi text in a base-14 font — the shape the
+ * Milestone 3 route landed on, measured at the size a real document
+ * holds. When $encrypted, the same document under the standard security
+ * handler with an empty user password: RC4 revision 3, every content
+ * stream under its own object's key.
+ *
+ * @param list<string> $paragraphs
+ */
+function pdfBytes(array $paragraphs, bool $encrypted = false): string {
+	$linesPerPage = 45;
+	$pages = array_chunk($paragraphs, $linesPerPage);
+	$pad = "\x28\xBF\x4E\x5E\x4E\x75\x8A\x41\x64\x00\x4E\x56\xFF\xFA\x01\x08"
+		. "\x2E\x2E\x00\xB6\xD0\x68\x3E\x80\x2F\x0C\xA9\xFE\x64\x53\x69\x7A";
+	$p = -28;
+	$id = hex2bin('0123456789abcdef0123456789abcdef');
+
+	$fileKey = null;
+	if ($encrypted) {
+		$ownerKey = md5($pad, true);
+		for ($i = 0; $i < 50; $i++) {
+			$ownerKey = md5($ownerKey, true);
+		}
+		$o = benchRc4(substr($ownerKey, 0, 5), $pad);
+		$h = md5($pad . $o . pack('V', $p & 0xFFFFFFFF) . $id, true);
+		for ($i = 0; $i < 50; $i++) {
+			$h = md5(substr($h, 0, 5), true);
+		}
+		$fileKey = substr($h, 0, 5);
+	}
+
+	// object layout: 1 catalog, 2 pages, then page/content pairs, one
+	// font per document, and the /Encrypt dict when encrypted
+	$objects = [];
+	$fontNum = 3 + count($pages) * 2;
+	$encryptNum = $fontNum + 1;
+
+	$kids = [];
+	foreach ($pages as $i => $pageLines) {
+		$pageNum = 3 + $i * 2;
+		$contentNum = $pageNum + 1;
+		$kids[] = "$pageNum 0 R";
+
+		$content = "BT\n/F1 10 Tf\n";
+		foreach ($pageLines as $line) {
+			$winAnsi = mb_convert_encoding($line, 'Windows-1252', 'UTF-8');
+			$content .= '(' . str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $winAnsi) . ") Tj\nT*\n";
+		}
+		$content .= "ET\n";
+		$streamBytes = gzcompress($content, 6);
+		if ($fileKey !== null) {
+			$objectKey = substr(md5($fileKey . substr(pack('V', $contentNum), 0, 3) . pack('v', 0), true), 0, 10);
+			$streamBytes = benchRc4($objectKey, $streamBytes);
+		}
+
+		$objects[$pageNum] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842]'
+			. " /Resources << /Font << /F1 $fontNum 0 R >> >> /Contents $contentNum 0 R >>";
+		$objects[$contentNum] = '<< /Length ' . strlen($streamBytes) . " /Filter /FlateDecode >>\nstream\n$streamBytes\nendstream";
+	}
+
+	$objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+	$objects[2] = '<< /Type /Pages /Kids [' . implode(' ', $kids) . '] /Count ' . count($pages) . ' >>';
+	$objects[$fontNum] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+	if ($fileKey !== null) {
+		$u = md5($pad . $id, true);
+		$u = benchRc4($fileKey, $u);
+		for ($i = 1; $i <= 19; $i++) {
+			$u = benchRc4($fileKey ^ str_repeat(chr($i), 5), $u);
+		}
+		$u .= str_repeat("\0", 16);
+		$objects[$encryptNum] = "<< /Filter /Standard /V 1 /R 3 /Length 40 /P $p"
+			. ' /O (' . str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $o) . ')'
+			. ' /U (' . str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $u) . ') >>';
+	}
+
+	$head = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
+	$body = '';
+	$at = strlen($head);
+	$offsets = [];
+	for ($num = 1; $num <= count($objects) + 1; $num++) {
+		if (!isset($objects[$num])) {
+			continue;
+		}
+		$offsets[$num] = $at;
+		$entry = "$num 0 obj\n" . $objects[$num] . "\nendobj\n";
+		$body .= $entry;
+		$at += strlen($entry);
+	}
+
+	$size = max(array_keys($offsets)) + 1;
+	$xref = "xref\n0 $size\n0000000000 65535 f \n";
+	foreach ($offsets as $offset) {
+		$xref .= sprintf('%010d 00000 n ', $offset) . "\n";
+	}
+
+	$extra = $fileKey !== null ? " /Encrypt $encryptNum 0 R /ID [<" . bin2hex($id) . '> <' . bin2hex($id) . '>]' : '';
+	return $head . $body . $xref . "trailer\n<< /Size $size /Root 1 0 R$extra >>\nstartxref\n$at\n%%EOF\n";
+}
+
+function benchRc4(string $key, string $data): string {
+	$s = range(0, 255);
+	$j = 0;
+	$keyLength = strlen($key);
+	for ($i = 0; $i < 256; $i++) {
+		$j = ($j + $s[$i] + ord($key[$i % $keyLength])) & 0xFF;
+		[$s[$i], $s[$j]] = [$s[$j], $s[$i]];
+	}
+	$keystream = '';
+	$i = $j = 0;
+	$len = strlen($data);
+	for ($at = 0; $at < $len; $at++) {
+		$i = ($i + 1) & 0xFF;
+		$j = ($j + $s[$i]) & 0xFF;
+		[$s[$i], $s[$j]] = [$s[$j], $s[$i]];
+		$keystream .= chr($s[($s[$i] + $s[$j]) & 0xFF]);
+	}
+	return $data ^ $keystream;
 }
 
 /**

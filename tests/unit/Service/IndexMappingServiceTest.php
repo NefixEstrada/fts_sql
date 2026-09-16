@@ -80,6 +80,24 @@ class IndexMappingServiceTest extends TestCase {
 
 	public function testADeniedExtensionIsIndexedWithoutContent(): void {
 		$document = self::document(
+			title: 'Escola/Sortida al Museu de Ciències.epub',
+			content: base64_encode('a zip of XML nobody claims'),
+			encoded: IIndexDocument::ENCODED_BASE64,
+			access: self::access(owner: 'biel'),
+		);
+
+		$row = IndexMappingService::map($document, 2097152);
+
+		$this->assertFalse($row->contentExtracted);
+		$this->assertNull($row->content);
+		$this->assertNotNull($row->contentError);
+		$this->assertStringContainsString('epub', $row->contentError);
+		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
+		$this->assertSame('Escola/Sortida al Museu de Ciències.epub', $row->title);
+	}
+
+	public function testAPdfTheParserGivesUpOnIsIndexedOnWhatItRecovered(): void {
+		$document = self::document(
 			title: 'Escola/Sortida al Museu de Ciències.pdf',
 			content: base64_encode('%PDF-1.7'),
 			encoded: IIndexDocument::ENCODED_BASE64,
@@ -93,7 +111,6 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertNotNull($row->contentError);
 		$this->assertStringContainsString('pdf', $row->contentError);
 		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
-		$this->assertSame('Escola/Sortida al Museu de Ciències.pdf', $row->title);
 	}
 
 	public function testADocxIsIndexedOnItsBodyText(): void {

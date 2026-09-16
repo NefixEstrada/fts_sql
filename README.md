@@ -20,14 +20,30 @@ text search. The design lives in [`DESIGN.md`](DESIGN.md); read it first.
 | Plain text — `.txt`, `.md`, `.csv`, `.log` and every extension nobody declared otherwise | the content as-is |
 | OOXML — `.docx`, `.xlsx`, `.pptx` | body text, extracted by the app's own `XMLReader` passes over the container |
 | ODF — `.odt`, `.ods`, `.odp` | body text, one pass over `content.xml` |
-| Everything else — PDF, legacy `.doc`/`.xls`/`.ppt`, `.epub`, archives, executables, images, audio and video | title, access and tags only, with the reason recorded on the document |
+| PDF — `.pdf` | body text, page by page until the budget, by the app's own extractor (below) |
+| Everything else — legacy `.doc`/`.xls`/`.ppt`, `.epub`, archives, executables, images, audio and video | title, access and tags only, with the reason recorded on the document |
 
 Extraction is pure PHP over streams — no Elasticsearch, no Tika, no
-external binary, no bundled library. An encrypted document is reported as
-such; a document whose text was cut at the content budget is indexed on
-what survived and flagged; a document the parser gave up on is indexed on
-what was recovered, with the cause. PDF and the legacy binary Office
-formats arrive in later milestones.
+external binary, and, so far, no bundled library: the PDF too is read by
+the app's own code. An encrypted document is reported as such — except
+the one class every reader opens silently, the standard security
+handler with an empty user password (RC4 and AES-128), which is
+decrypted; AES-256 revisions and real passwords stay encrypted. A
+document whose text was cut at the content budget is indexed on what
+survived and flagged; a document the parser gave up on is indexed on
+what was recovered, with the cause; a PDF page that fails costs that
+page, never the run. The legacy binary Office formats arrive in
+Milestone 4.
+
+The PDF is the route DESIGN.md's own measurement picked: `smalot/pdfparser`
+materialises every object of its 21 MiB reference file into 697.5 MiB of
+PHP memory — a fatal at Nextcloud's 512 MB floor before any text — and
+crashes on that file besides, so `lib/Extraction/Pdf/` reads the
+cross-reference index (classic tables, PDF 1.5 streams with object
+streams, hybrid files, and a bounded scan when the chain is broken) and
+then, per page, only what the page names: its content streams under a
+capped inflate, its fonts' encodings and ToUnicode CMaps, its form
+XObjects. The whole file sits under the 512 MB floor at a ~70 MiB peak.
 
 ## Tooling
 
@@ -176,10 +192,20 @@ One batch scenario (a full corpus of corpus-sized documents — the shape
 of a real indexing run) and one file per extractor and per boundary:
 within the budget, over it (the sink fills and the walk stops early),
 and past the entry read cap (the refusal boundary, documented rather
-than hidden). Peaks are marginal, measured under the 512 MB ceiling
-Nextcloud documents. Today's container numbers: 0.9 ms per document in
-the batch, a 1 MiB-text docx complete at +6 MiB peak, and the over-budget
-docx cut at the budget with +14.7 MiB — the numbers the Milestone 3 PDF
-route decision reads.
+than hidden). The PDF adds its own scenarios — a many-page compressed
+document, the same shape encrypted under an empty user password, and
+the 756-page ISO 32000-1 the route decision measured, when its path is
+passed (`--pdf=…`; the file is not in the repository). Peaks are
+marginal, measured under the 512 MB ceiling Nextcloud documents.
+Today's numbers: 0.9 ms per document in the batch, a 1 MiB-text docx
+complete at +6 MiB peak, the over-budget docx cut at the budget with
++14.7 MiB, and the ISO at a ~70 MiB peak where the library route cost
+704.3 MiB and a fatal — the memory claim, decided. On speed the host
+decides which designed bound stops the walk: the dev shell reaches the
+full 2 MiB budget cut in ~7 s, the slower container PHP meets the 10 s
+wall-clock first with ~577 KiB extracted — either way the document is
+findable by what survived, with the cause recorded
+(`benchmark/results/2026-09-16-pdf.json` keeps both sides and both
+hosts).
 
 [docker-dev]: https://github.com/nextcloud/nextcloud-docker-dev
