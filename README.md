@@ -68,8 +68,10 @@ $ docker exec -u www-data -w /var/www/html/apps-extra/fts_sql \
 
 The web frontend answers at `http://stable34.local` (add it to `/etc/hosts`,
 or curl with `-H 'Host: stable34.local'` against the proxy port). The
-MariaDB/MySQL/SQLite instances of the integration matrix are not set up
-locally yet; they belong to CI (see DESIGN.md, "Verification: two tiers,
-four engines").
+MariaDB, MySQL and SQLite legs of the integration matrix are not set up
+locally (disk); they run in CI —
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml) installs a real
+Nextcloud against all four engines from the official `continuous-integration-*`
+images and runs both suites on each.
 
 [docker-dev]: https://github.com/nextcloud/nextcloud-docker-dev
