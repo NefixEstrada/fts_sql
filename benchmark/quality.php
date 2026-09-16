@@ -29,11 +29,11 @@ declare(strict_types=1);
 
 use OC\FullTextSearch\Model\DocumentAccess;
 use OC\FullTextSearch\Model\IndexDocument;
+use OCA\FtsSql\Model\AccentFold;
+use OCA\FtsSql\Platform\SqlPlatform;
 use OCA\FullTextSearch\Model\Index;
 use OCA\FullTextSearch\Model\SearchRequest;
 use OCA\FullTextSearch\Model\SearchResult;
-use OCA\FtsSql\Model\AccentFold;
-use OCA\FtsSql\Platform\SqlPlatform;
 use OCP\FullTextSearch\IFullTextSearchProvider;
 use OCP\FullTextSearch\Model\IIndex;
 use OCP\FullTextSearch\Model\IIndexDocument;
