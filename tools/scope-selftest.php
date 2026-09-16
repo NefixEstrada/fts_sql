@@ -14,8 +14,14 @@ declare(strict_types=1);
  * real prefix, and checks what only matters in production: the class
  * exists under OCA\FtsSql\Vendor, Nextcloud's PSR-4 rule resolves it
  * inside lib/Vendor, and the unprefixed original is gone from vendor/.
- * A second fixture with a files autoload must fail the pipeline loudly,
- * because such a package would ship but never load.
+ * One fixture is a transitive dependency — reached only through another
+ * fixture's require — because php-scoper rewrites cross-package
+ * references whether or not the referenced package is in the finders,
+ * so a closure miss is a class that cannot load. One is a classmap of
+ * a global class, the pclzip shape: it must land at the prefix root
+ * and carry its licence beside it. Another fixture with a files
+ * autoload must fail the pipeline loudly, because such a package would
+ * ship but never load.
  */
 
 require_once __DIR__ . '/scoping.php';
@@ -59,9 +65,9 @@ try {
 	}
 
 	scoping_rm($work);
-	foreach (['project', 'fixture/src', 'badfixture'] as $dir) {
+	foreach (['project', 'fixture/src', 'shapefixture/src', 'legacyfixture', 'devtoolfixture/src', 'badfixture'] as $dir) {
 		if (!mkdir($work . '/' . $dir, 0755, true)) {
-			throw new RuntimeException('cannot create ' . $work . '/' . $dir);
+			throw new RuntimeException('cannot create ' . $dir);
 		}
 	}
 
@@ -96,14 +102,93 @@ try {
 		'autoload' => ['files' => ['functions.php']],
 	]));
 	file_put_contents($work . '/badfixture/functions.php', <<<'PHP'
-		<?php
+	<?php
 
-		declare(strict_types=1);
+	declare(strict_types=1);
 
-		function ftsSqlFixtureFilesAutoload(): bool {
-			return true;
+	function ftsSqlFixtureFilesAutoload(): bool {
+		return true;
+	}
+	PHP);
+
+	// The transitive fixture: its require is the only path to ScopedMath,
+	// so a pipeline that scopes direct requires alone leaves Math's
+	// prefixed name existing nowhere and Shape unable to load.
+	file_put_contents($work . '/shapefixture/composer.json', $encode([
+		'name' => 'fts-sql/fixture-scoped-shape',
+		'description' => 'a PSR-4 fixture that requires another fixture',
+		'type' => 'library',
+		'license' => 'MIT',
+		'require' => ['fts-sql/fixture-scoped-math' => '^1.0'],
+		'autoload' => ['psr-4' => ['FtsSqlFixture\\ScopedShape\\' => 'src/']],
+	]));
+	file_put_contents($work . '/shapefixture/src/Shape.php', <<<'PHP'
+	<?php
+
+	declare(strict_types=1);
+
+	namespace FtsSqlFixture\ScopedShape;
+
+	use FtsSqlFixture\ScopedMath\Math;
+
+	final class Shape {
+		public static function addViaMath(int $a, int $b): int {
+			return Math::add($a, $b);
 		}
-		PHP);
+	}
+	PHP);
+
+	// The classmap fixture: a global class, the pclzip shape, plus a
+	// licence-like file at the package root that must ride along.
+	file_put_contents($work . '/legacyfixture/composer.json', $encode([
+		'name' => 'fts-sql/fixture-classmap-legacy',
+		'description' => 'a classmap fixture with one global class',
+		'type' => 'library',
+		'license' => 'LGPL-2.1',
+		'autoload' => ['classmap' => ['legacy.php']],
+	]));
+	file_put_contents($work . '/legacyfixture/legacy.php', <<<'PHP'
+	<?php
+
+	declare(strict_types=1);
+
+	class FtsSqlLegacyZip {
+		public function __construct(private string $path) {
+		}
+
+		public function open(): string {
+			return 'opened:' . $this->path;
+		}
+	}
+	PHP);
+	file_put_contents($work . '/legacyfixture/COPYING.txt', "a licence the pipeline must carry along\n");
+
+	// The dev-tool fixture: a require-dev package that loads a runtime
+	// package — Psalm and composer/pcre, the shape of it. The pipeline
+	// must keep that one's unscoped copy in vendor/ and prune the rest.
+	file_put_contents($work . '/devtoolfixture/composer.json', $encode([
+		'name' => 'fts-sql/fixture-dev-tool',
+		'description' => 'a dev-only fixture that requires a runtime fixture',
+		'type' => 'library',
+		'license' => 'MIT',
+		'require' => ['fts-sql/fixture-scoped-math' => '^1.0'],
+		'autoload' => ['psr-4' => ['FtsSqlFixture\\DevTool\\' => 'src/']],
+	]));
+	file_put_contents($work . '/devtoolfixture/src/DevTool.php', <<<'PHP'
+	<?php
+
+	declare(strict_types=1);
+
+	namespace FtsSqlFixture\DevTool;
+
+	use FtsSqlFixture\ScopedMath\Math;
+
+	final class DevTool {
+		public static function double(int $v): int {
+			return Math::add($v, $v);
+		}
+	}
+	PHP);
 
 	$project = [
 		'name' => 'fts-sql/scope-selftest',
@@ -112,6 +197,12 @@ try {
 		'repositories' => [
 			['type' => 'path', 'url' => '../../fixture',
 				'options' => ['symlink' => false, 'versions' => ['fts-sql/fixture-scoped-math' => '1.0.0']]],
+			['type' => 'path', 'url' => '../../shapefixture',
+				'options' => ['symlink' => false, 'versions' => ['fts-sql/fixture-scoped-shape' => '1.0.0']]],
+			['type' => 'path', 'url' => '../../legacyfixture',
+				'options' => ['symlink' => false, 'versions' => ['fts-sql/fixture-classmap-legacy' => '1.0.0']]],
+			['type' => 'path', 'url' => '../../devtoolfixture',
+				'options' => ['symlink' => false, 'versions' => ['fts-sql/fixture-dev-tool' => '1.0.0']]],
 			['type' => 'path', 'url' => '../../badfixture',
 				'options' => ['symlink' => false, 'versions' => ['fts-sql/fixture-files-autoload' => '1.0.0']]],
 		],
@@ -121,9 +212,12 @@ try {
 
 	// Each scratch project stages the pipeline exactly like `make
 	// appstore` stages it into the build directory.
-	$stage = static function (string $dir, array $require) use ($repo, $project, $encode): void {
+	$stage = static function (string $dir, array $require, array $requireDev = []) use ($repo, $project, $encode): void {
 		mkdir($dir, 0755, true);
 		$project['require'] = $require;
+		if ($requireDev !== []) {
+			$project['require-dev'] = $requireDev;
+		}
 		file_put_contents($dir . '/composer.json', $encode($project));
 		copy($repo . '/scoper.inc.php', $dir . '/scoper.inc.php');
 		selftest_run(['cp', '-a', $repo . '/tools', $dir . '/'], $repo);
@@ -131,10 +225,16 @@ try {
 
 	$good = $work . '/project/good';
 	$bad = $work . '/project/bad';
-	$stage($good, ['fts-sql/fixture-scoped-math' => '*']);
+	// ScopedMath is deliberately absent from require: it must arrive only
+	// through the shape fixture's require, which is what the closure walk
+	// is for — and the dev tool requires it too, which is what the
+	// dev-shared pruning exception is for
+	$stage($good,
+		['fts-sql/fixture-scoped-shape' => '*', 'fts-sql/fixture-classmap-legacy' => '*'],
+		['fts-sql/fixture-dev-tool' => '*']);
 	$stage($bad, ['fts-sql/fixture-scoped-math' => '*', 'fts-sql/fixture-files-autoload' => '*']);
 
-	// --- the positive case: the fixture ends up under the app's namespace
+	// --- the positive case: the fixtures end up under the app's namespace
 	foreach (['good' => $good, 'bad' => $bad] as $projectDir) {
 		[$code, $output] = selftest_run(['composer', 'install', '--no-interaction'], $projectDir);
 		if (!selftest_check($report, $code === 0, 'composer install failed in ' . $projectDir . PHP_EOL . $output)) {
@@ -146,13 +246,17 @@ try {
 		[PHP_BINARY, $repo . '/tools/scope-vendor.php', $good, $repo . '/vendor/bin/php-scoper'],
 		$repo,
 	);
-	selftest_check($report, $code === 0, 'the pipeline failed on the PSR-4 fixture:' . PHP_EOL . $output);
+	selftest_check($report, $code === 0, 'the pipeline failed on the fixtures:' . PHP_EOL . $output);
 
 	$class = SCOPING_PREFIX . '\FtsSqlFixture\ScopedMath\Math';
 	selftest_check($report, is_file($good . '/lib/Vendor/FtsSqlFixture/ScopedMath/Math.php'),
-		'the scoped class file is not at lib/Vendor/FtsSqlFixture/ScopedMath/Math.php');
-	selftest_check($report, !is_dir($good . '/vendor/fts-sql'),
-		'the unscoped package is still in vendor/fts-sql');
+		'the transitive class file is not at lib/Vendor/FtsSqlFixture/ScopedMath/Math.php');
+	selftest_check($report, !is_dir($good . '/vendor/fts-sql/fixture-scoped-shape'),
+		'the unscoped shape package is still in vendor/');
+	selftest_check($report, !is_dir($good . '/vendor/fts-sql/fixture-classmap-legacy'),
+		'the unscoped classmap package is still in vendor/');
+	selftest_check($report, is_dir($good . '/vendor/fts-sql/fixture-scoped-math'),
+		'the dev-shared math package was pruned from vendor/, breaking the dev tooling');
 
 	require $good . '/vendor/autoload.php';
 	selftest_check($report, class_exists($class),
@@ -163,8 +267,52 @@ try {
 			'class ' . $class . ' loads from ' . $file . ', not from lib/Vendor');
 		selftest_check($report, $class::add(2, 3) === 5, 'the scoped class does not run');
 	}
-	selftest_check($report, !class_exists('FtsSqlFixture\ScopedMath\Math'),
-		'the unprefixed FtsSqlFixture\ScopedMath\Math still autoloads');
+	selftest_check($report, !class_exists('FtsSqlFixture\ScopedShape\Shape'),
+		'the unprefixed FtsSqlFixture\ScopedShape\Shape still autoloads: a runtime-only package must vanish');
+	// the dev-shared exception: the unprefixed copy serves the dev tool,
+	// exactly like Psalm's composer/pcre serves Psalm
+	selftest_check($report, class_exists('FtsSqlFixture\DevTool\DevTool'),
+		'the dev tool fixture does not autoload');
+	if (class_exists('FtsSqlFixture\DevTool\DevTool')) {
+		selftest_check($report, \FtsSqlFixture\DevTool\DevTool::double(3) === 6,
+			'the dev tool cannot reach its unprefixed dependency');
+	}
+
+	// --- the transitive case: a class reaching a scoped dependency of
+	// its own, through the app autoloader alone
+	$shape = SCOPING_PREFIX . '\FtsSqlFixture\ScopedShape\Shape';
+	selftest_check($report, is_file($good . '/lib/Vendor/FtsSqlFixture/ScopedShape/Shape.php'),
+		'the scoped shape class file is not at lib/Vendor/FtsSqlFixture/ScopedShape/Shape.php');
+	selftest_check($report, class_exists($shape),
+		'class ' . $shape . ' does not autoload through the project autoloader');
+	if (class_exists($shape)) {
+		selftest_check($report, $shape::addViaMath(2, 3) === 5,
+			'the scoped shape cannot reach the scoped transitive Math: a closure miss');
+	}
+
+	// --- the classmap case: one global class at the prefix root, and
+	// its licence carried beside it
+	$legacy = SCOPING_PREFIX . '\FtsSqlLegacyZip';
+	selftest_check($report, is_file($good . '/lib/Vendor/FtsSqlLegacyZip.php'),
+		'the classmap class file is not at lib/Vendor/FtsSqlLegacyZip.php');
+	selftest_check($report, class_exists($legacy),
+		'class ' . $legacy . ' does not autoload through the project autoloader');
+	if (class_exists($legacy)) {
+		selftest_check($report, (new $legacy('demo'))->open() === 'opened:demo',
+			'the classmap class does not run');
+	}
+	// php-scoper leaves a bridge: including the file also aliases the
+	// original global name to the prefixed class, so the library's own
+	// dynamic references keep working. The safe property is not that the
+	// alias is absent — it is that the global name can only ever resolve
+	// to the prefixed class, never to someone else's.
+	if (class_exists('FtsSqlLegacyZip')) {
+		$aliasTarget = (new ReflectionClass('FtsSqlLegacyZip'))->getName();
+		selftest_check($report, $aliasTarget === $legacy,
+			'the global FtsSqlLegacyZip name aliases to ' . $aliasTarget . ', not to ' . $legacy);
+	}
+	selftest_check($report, is_file($good . '/lib/Vendor/COPYING.txt'),
+		'the classmap fixture licence was dropped instead of carried along');
 
 	// --- the negative case: a files autoload must fail the pipeline
 	[$code, $output] = selftest_run(
@@ -192,4 +340,4 @@ if ($failures !== []) {
 }
 
 scoping_rm($work);
-echo 'scoping self-test: pipeline, organizer, pruning and the files-autoload refusal all hold' . PHP_EOL;
+echo 'scoping self-test: pipeline, organizer, closure, classmap, dev-shared pruning and the files-autoload refusal all hold' . PHP_EOL;

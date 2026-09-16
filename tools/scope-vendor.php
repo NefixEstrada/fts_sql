@@ -87,7 +87,15 @@ scoping_organize($target, $names);
 // 3. the unscoped copies have to go: while they remain in vendor/, the
 // Composer autoloader keeps serving the unprefixed namespaces to every
 // test and tool, and production — which loads only lib/ — diverges.
+// The one exception is a package the dev-only tooling also depends on
+// (Psalm loads composer/pcre, which is in PhpSpreadsheet's closure):
+// pruning it would break the tool, and keeping it risks nothing, since
+// no app code ever names a utility package.
+$shared = scoping_dev_shared_packages($root, $names);
 foreach ($packages as $package) {
+	if (in_array($package['name'], $shared, true)) {
+		continue;
+	}
 	scoping_rm($package['path']);
 	$organisation = dirname($package['path']);
 	@rmdir($organisation); // stays when dev-only siblings of the same organisation remain
@@ -98,3 +106,7 @@ scoping_composer($root, 'dump-autoload -o');
 
 echo 'scoping: rewrote ' . count($packages) . ' package(s) under ' . SCOPING_PREFIX
 	. ' into ' . SCOPING_TARGET_DIR . ': ' . implode(', ', $names) . PHP_EOL;
+if ($shared !== []) {
+	echo 'scoping: kept the unscoped copy of ' . implode(', ', $shared)
+		. ' in vendor/ — the dev tooling loads them too' . PHP_EOL;
+}
