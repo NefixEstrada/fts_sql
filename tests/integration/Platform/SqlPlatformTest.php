@@ -105,6 +105,34 @@ class SqlPlatformTest extends TestCase {
 		$this->assertTrue($this->platform->testPlatform());
 	}
 
+	/**
+	 * DESIGN.md Scenario 4: a text where every token is distinct hits the
+	 * tsvector's 1,048,575-byte ceiling (SQLSTATE 54000) at roughly 637 KB,
+	 * below the 2 MiB budget. The platform halves the content and retries —
+	 * up to four times — and the row lands truncated: the document is still
+	 * indexed, still findable by what survived, and still reports ok.
+	 */
+	public function testADocumentTheEngineRefusesLandsTruncated(): void {
+		$tokens = [];
+		for ($i = 0; $i < 80000; $i++) {
+			$tokens[] = sprintf('zzqj%08d', $i);
+		}
+		$content = implode(' ', $tokens); // ~1.04 MB of text, ~1.3 MB of tsvector: past the ceiling
+
+		$owner = new DocumentAccess('biel');
+		$index = $this->platform->indexDocument($this->document('giant-1', $content, $owner));
+
+		$this->assertTrue($index->isStatus(IIndex::INDEX_DONE), 'the document must cost itself, never the run');
+		$this->assertTrue($index->isStatus(IIndex::INDEX_CONTENT));
+
+		$stored = $this->platform->getDocument('test_provider', 'giant-1');
+		$this->assertLessThan(strlen($content), strlen($stored->getContent()), 'the content landed truncated by the halvings');
+
+		$viewer = new DocumentAccess();
+		$viewer->setViewerId('biel');
+		$this->assertSame(1, $this->search('zzqj00000001', $viewer)->getTotal(), 'findable by what survived');
+	}
+
 	public function testGetDocumentRebuildsTheStoredDocument(): void {
 		$owner = new DocumentAccess('biel');
 		$owner->addGroup('professorat');

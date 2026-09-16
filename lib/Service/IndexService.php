@@ -199,11 +199,16 @@ final class IndexService {
 
 	/**
 	 * SQLSTATE 54000 — string_data_right_truncation as PostgreSQL reports a
-	 * tsvector past its 1,048,575-byte ceiling. The SQLSTATE travels on the
-	 * wrapped driver exception; OCP\DB\Exception's own code is not it.
+	 * tsvector past its 1,048,575-byte ceiling. The SQLSTATE sits at the
+	 * BOTTOM of the wrap chain (OCP\DB\Exception → DBAL DriverException →
+	 * PDOException), so the whole chain is walked.
 	 */
 	private static function isTsvectorTooLarge(DbException $e): bool {
-		$previous = $e->getPrevious();
-		return $previous !== null && (string)$previous->getCode() === '54000';
+		for ($previous = $e->getPrevious(); $previous !== null; $previous = $previous->getPrevious()) {
+			if ((string)$previous->getCode() === '54000') {
+				return true;
+			}
+		}
+		return false;
 	}
 }
