@@ -1,0 +1,44 @@
+{
+ "stage": "extraction+ppt",
+ "date": "2026-09-16",
+ "php": "8.2.33",
+ "budget_bytes": 2097152,
+ "scenarios": {
+  "ppt_in_budget": {
+   "file_bytes": 2106880,
+   "text_bytes": 1018863,
+   "cause": "complete",
+   "ms": 271,
+   "peak_bytes": 8413184
+  },
+  "ppt_over_budget": {
+   "file_bytes": 6303232,
+   "text_bytes": 2097139,
+   "cause": "budget cut",
+   "ms": 858,
+   "peak_bytes": 27246592
+  }
+ },
+ "milestone": {
+  "issue": "DESIGN.md Milestone 4: .ppt over the bundled, scoped PhpOffice reader",
+  "reader": "phpoffice/phppresentation 1.2.0 PowerPoint97, SKIP_IMAGES, behind the app's own compound-file gate (lib/Extraction/Ppt/)",
+  "fixture": "corpus text until 1 MiB, six paragraphs per slide, 141 slides, 2.01 MiB file, built by tests/Fixtures.php::ppt",
+  "memory_note": "the marginal peak is the reader's own object model, not the walk: 8 MiB in budget, 26 MiB while filling the whole 2 MiB budget from a 6.16 MiB deck — both far under the 512 MiB floor, which is the number the design's PHP-route decision needs",
+  "clock_note": "the container PHP is ~10x slower per operation: the in-budget deck costs 1.6 s there. A 20 MiB deck (the framework's own upstream gate) scales past the extractor's 10 s clock and stops with the time-budget cause and what was recovered — the same honest boundary the PDF extractor documents"
+ },
+ "container_run": {
+  "where": "nextcloud-docker-dev master-stable34-1 (the CI-equivalent PHP)",
+  "ppt_in_budget": {
+   "ms": 1619,
+   "text_bytes": 1018863,
+   "peak_bytes": 8413184,
+   "cause": "complete"
+  },
+  "ppt_over_budget": {
+   "ms": 4817,
+   "text_bytes": 2097139,
+   "peak_bytes": 27246592,
+   "cause": "budget cut"
+  }
+ }
+}

@@ -417,4 +417,317 @@ final class Fixtures {
 			self::pdfStream('', $cmap),
 		]);
 	}
+
+	// ---- PowerPoint 97 fixtures ----------------------------------------------
+
+	/**
+	 * A readable .ppt: one text shape per slide, every paragraph its own
+	 * styled run, exactly the records the PowerPoint97 reader demands
+	 * and nothing it merely tolerates. The paragraph delimiters are the
+	 * format's own (\r inside the text atoms), so the reader builds one
+	 * paragraph per string, the shape the .pptx fixtures build from
+	 * their slide XML.
+	 *
+	 * @param list<list<string>> $slides paragraphs per slide
+	 */
+	public static function ppt(array $slides): string {
+		return self::pptContainer($slides)['bytes'];
+	}
+
+	/**
+	 * The same file with the encryption token: the compound container is
+	 * untouched, so what this exercises is the CurrentUserAtom read,
+	 * not the reader's own refusal.
+	 *
+	 * @param list<list<string>> $slides
+	 */
+	public static function pptEncryptedToken(array $slides): string {
+		$built = self::pptContainer($slides);
+		$tokenAt = $built['currentUserOffset'] + 12;
+		return substr_replace($built['bytes'], pack('V', 0xF3D1C4DF), $tokenAt, 4);
+	}
+
+	/**
+	 * The same file with the slide container claiming far more bytes
+	 * than the document stream holds: the shape the reader's skip loops
+	 * would walk past the end of the string.
+	 *
+	 * @param list<list<string>> $slides
+	 */
+	public static function pptLyingSlideLength(array $slides): string {
+		$built = self::pptContainer($slides);
+		return substr_replace($built['bytes'], pack('V', 0x00FFFF00), $built['firstSlideOffset'] + 4, 4);
+	}
+
+	/**
+	 * The same file with the document stream's last sector pointing
+	 * back at its first: the allocation chain is a loop.
+	 *
+	 * @param list<list<string>> $slides
+	 */
+	public static function pptFatCycle(array $slides): string {
+		$built = self::pptContainer($slides);
+		$document = $built['layout']['streams']['PowerPoint Document'];
+		$lastSector = $document['start'] + $document['sectors'] - 1;
+		$entryAt = 512 + $built['layout']['fatStart'] * 512 + $lastSector * 4;
+		return substr_replace($built['bytes'], pack('V', $document['start']), $entryAt, 4);
+	}
+
+	/**
+	 * @param list<list<string>> $slides
+	 * @return array{bytes: string, currentUserOffset: int, firstSlideOffset: int, layout: array{fatStart: int, streams: array<string, array{start: int, sectors: int}>}}
+	 */
+	private static function pptContainer(array $slides): array {
+		$document = self::pptDocumentStream($slides);
+
+		$userEditAt = strlen($document) - (8 + 0x1C) - self::pptPersistDirectoryLength(count($slides));
+		$currentUser = substr_replace(self::pptCurrentUserStream(), pack('V', $userEditAt), 16, 4);
+
+		$built = self::oleContainer([
+			['name' => 'Current User', 'data' => $currentUser],
+			['name' => 'PowerPoint Document', 'data' => $document],
+			['name' => 'Pictures', 'data' => ''],
+		]);
+
+		$currentUserOffset = 512 + $built['layout']['streams']['Current User']['start'] * 512;
+		$documentOffset = 512 + $built['layout']['streams']['PowerPoint Document']['start'] * 512;
+		// the document container and its one atom precede the first slide
+		$firstSlideOffset = $documentOffset + (8 + 8 + 0x28);
+
+		return [
+			'bytes' => $built['bytes'],
+			'currentUserOffset' => $currentUserOffset,
+			'firstSlideOffset' => $firstSlideOffset,
+			'layout' => $built['layout'],
+		];
+	}
+
+	/**
+	 * The document stream: document container, slide containers, the
+	 * user edit atom, the persist directory — in that order, which is
+	 * what the offsets above rely on.
+	 *
+	 * @param list<list<string>> $slides
+	 */
+	private static function pptDocumentStream(array $slides): string {
+		$documentContainer = self::pptRecord(0xF, 0, 0x3E8,
+			self::pptRecord(1, 0, 0x3E9, str_repeat("\0", 0x28)));
+
+		$stream = $documentContainer;
+		$slideOffsets = [];
+		foreach ($slides as $paragraphs) {
+			$slideOffsets[] = strlen($stream);
+			$stream .= self::pptSlideContainer($paragraphs);
+		}
+
+		$userEditAt = strlen($stream);
+		$persistDirectoryAt = $userEditAt + 8 + 0x1C;
+
+		$userEdit = pack('V', 256)          // lastSlideIdRef
+			. pack('v', 0x000F)             // version
+			. "\x00"                        // minorVersion: 0
+			. "\x03"                        // majorVersion: 3
+			. pack('V', 0)                  // offsetLastEdit
+			. pack('V', $persistDirectoryAt)
+			. pack('V', 1)                  // docPersistIdRef: 1
+			. pack('V', count($slides) + 2) // persistIdSeed
+			. pack('v', 1)                  // lastView
+			. pack('v', 0);                 // unused
+		$stream .= self::pptRecord(0, 0, 0x0FF5, $userEdit);
+
+		$offsets = pack('V', 0);
+		foreach ($slideOffsets as $offset) {
+			$offsets .= pack('V', $offset);
+		}
+		$entry = pack('V', 1 | ((count($slideOffsets) + 1) << 20)) . $offsets;
+		$stream .= self::pptRecord(0, 0, 0x1772, $entry);
+
+		return $stream;
+	}
+
+	private static function pptPersistDirectoryLength(int $slides): int {
+		return 8 + 4 + 4 * ($slides + 1);
+	}
+
+	/**
+	 * @param list<string> $paragraphs
+	 */
+	private static function pptSlideContainer(array $paragraphs): string {
+		$slideAtom = self::pptRecord(2, 0, 0x3EF,
+			pack('V', 0)              // geom
+			. str_repeat("\0", 8)     // rgPlaceholderTypes
+			. pack('V', 0)            // masterIdRef
+			. pack('V', 0)            // notesIdRef
+			. pack('vv', 0, 0));      // slideFlags, unused
+
+		// one text shape: FSP, an anchor, and a textbox whose styled
+		// runs are one per paragraph
+		$textBox = self::pptRecord(0xF, 0, 0xF00D,
+			self::pptRecord(0, 0, 0x0F9F, "\0\0\0\0")
+			. self::pptRecord(0, 0, 0x0FA0, self::pptUtf16(implode("\r", $paragraphs)))
+			. self::pptStyleTextProp(array_map(
+				static fn (string $p): int => intdiv(strlen(mb_convert_encoding($p, 'UTF-16LE', 'UTF-8')), 2),
+				$paragraphs,
+			)));
+		$shape = self::pptRecord(0xF, 0, 0xF004,
+			self::pptRecord(2, 0, 0xF00A, pack('VV', 0x400, 0))
+			. self::pptRecord(0, 0, 0xF010, pack('vvvv', 100, 100, 600, 400))
+			. $textBox);
+
+		$drawing = self::pptRecord(0xF, 0, 0x040C,
+			self::pptRecord(0xF, 0, 0xF002,
+				self::pptRecord(0, 0, 0xF008, pack('VV', 0x400, 1))
+				. self::pptRecord(0xF, 0, 0xF003, $shape)));
+
+		$colorScheme = self::pptRecord(0, 1, 0x07F0, str_repeat("\0", 0x20));
+
+		return self::pptRecord(0xF, 0, 0x3EE, $slideAtom . $drawing . $colorScheme);
+	}
+
+	/**
+	 * StyleTextPropAtom: one paragraph-level run and one character-level
+	 * run per paragraph, each covering the paragraph's characters plus
+	 * its delimiter — the shape that makes the reader build one
+	 * paragraph per string. The counts are UTF-16 code units, the unit
+	 * the reader tallies the text in; all masks are zero, so no styling
+	 * fields ride along.
+	 *
+	 * @param list<int> $units UTF-16 code units per paragraph
+	 */
+	private static function pptStyleTextProp(array $units): string {
+		$body = '';
+		$runs = '';
+		foreach ($units as $count) {
+			$count = $count + 1;
+			$body .= pack('V', $count) . pack('v', 0) . pack('V', 0); // count, indent, masks
+			$runs .= pack('VV', $count, 0); // count, masks
+		}
+		return self::pptRecord(0, 0, 0x0FA1, $body . $runs);
+	}
+
+	private static function pptCurrentUserStream(): string {
+		// relVersion's own first byte (0x08) is a control character, and
+		// the ANSI user-name scan stops on the first of those without
+		// consuming it: an empty user name needs no terminator of its own
+		return self::pptRecord(0, 0, 0x0FF6,
+			pack('V', 0x14)           // size
+			. pack('V', 0xE391C80F)   // headerToken: not encrypted
+			. pack('V', 0)            // offsetToCurrentEdit, patched by the caller
+			. pack('v', 0)            // lenUserName
+			. pack('v', 0x03F4)       // docFileVersion
+			. "\x03"                  // majorVersion
+			. "\x00"                  // minorVersion
+			. pack('v', 0)            // unused
+			. pack('V', 8));          // relVersion
+	}
+
+	private static function pptUtf16(string $text): string {
+		return mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+	}
+
+	private static function pptRecord(int $version, int $instance, int $type, string $body): string {
+		return pack('vvV', $version | ($instance << 4), $type, strlen($body)) . $body;
+	}
+
+	/**
+	 * A compound-file container with no mini-stream: every stream is
+	 * padded past the 4096-byte threshold so its sectors hang off the
+	 * main allocation table, the layout both OLE readers this app has
+	 * dispatch on by the stream's declared size. Sector order: the
+	 * streams in the order given, then the directory, then the
+	 * allocation table itself.
+	 *
+	 * @param list<array{name: string, data: string}> $streams
+	 * @return array{bytes: string, layout: array{fatStart: int, streams: array<string, array{start: int, sectors: int}>}}
+	 */
+	private static function oleContainer(array $streams): array {
+		$end = 0xFFFFFFFE;
+		$fatSector = 0xFFFFFFFD;
+		$unused = 0xFFFFFFFF;
+
+		$dataSectors = [];
+		$layout = ['streams' => []];
+		$nextSector = 0;
+		foreach ($streams as $stream) {
+			$payload = $stream['data'];
+			if (strlen($payload) < 4096) {
+				$payload = str_pad($payload, 4096, "\0");
+			}
+			$sectors = intdiv(strlen($payload) - 1, 512) + 1;
+			$payload = str_pad($payload, $sectors * 512, "\0");
+
+			$layout['streams'][$stream['name']] = ['start' => $nextSector, 'sectors' => $sectors];
+			foreach (str_split($payload, 512) as $sector) {
+				$dataSectors[] = $sector;
+				$nextSector++;
+			}
+		}
+
+		$directorySector = $nextSector++;
+		$dataSectorCount = count($dataSectors) + 1; // + the directory
+
+		$fatSectors = 1;
+		while (128 * $fatSectors < $dataSectorCount + $fatSectors) {
+			$fatSectors++;
+		}
+		$layout['fatStart'] = $nextSector;
+
+		$total = $dataSectorCount + $fatSectors;
+		$fat = '';
+		for ($sector = 0; $sector < $total; $sector++) {
+			if ($sector >= $dataSectorCount) {
+				$next = $fatSector; // the table's own sectors
+			} else {
+				$next = $end;
+				foreach ($layout['streams'] as $info) {
+					if ($sector >= $info['start'] && $sector < $info['start'] + $info['sectors'] - 1) {
+						$next = $sector + 1;
+						break;
+					}
+				}
+			}
+			$fat .= pack('V', $next);
+		}
+		$fat = str_pad($fat, $fatSectors * 512, pack('V', $unused));
+
+		// directory: the root, then one entry per stream
+		$entries = self::oleDirectoryEntry('Root Entry', 5, $end, 0);
+		foreach ($streams as $stream) {
+			$info = $layout['streams'][$stream['name']];
+			$entries .= self::oleDirectoryEntry($stream['name'], 2, $info['start'], $info['sectors'] * 512);
+		}
+		$directory = str_pad($entries, 512, "\0");
+
+		$header = str_repeat("\0", 512);
+		$header = substr_replace($header, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1", 0, 8);
+		$header = substr_replace($header, pack('vvvv', 0x3E, 3, 0xFFFE, 9), 0x18, 8); // versions, byte order, sector shift
+		$header = substr_replace($header, pack('v', 6), 0x20, 2); // mini sector shift
+		$header = substr_replace($header, pack('V', $fatSectors), 0x2C, 4);
+		$header = substr_replace($header, pack('V', $directorySector), 0x30, 4);
+		$header = substr_replace($header, pack('V', $end), 0x3C, 4); // no mini allocation table
+		$difat = '';
+		for ($i = 0; $i < 109; $i++) {
+			$difat .= pack('V', $i < $fatSectors ? $layout['fatStart'] + $i : $unused);
+		}
+		$header = substr_replace($header, $difat, 0x4C, 436);
+
+		$bytes = $header . implode('', $dataSectors) . $directory;
+		for ($i = 0; $i < $fatSectors; $i++) {
+			$bytes .= substr($fat, $i * 512, 512);
+		}
+		return ['bytes' => $bytes, 'layout' => $layout];
+	}
+
+	private static function oleDirectoryEntry(string $name, int $type, int $start, int $size): string {
+		$entry = str_repeat("\0", 128);
+		$nameBytes = mb_convert_encoding($name, 'UTF-16LE', 'UTF-8') . "\0\0";
+		$entry = substr_replace($entry, $nameBytes, 0, strlen($nameBytes));
+		$entry = substr_replace($entry, pack('v', strlen($nameBytes)), 0x40, 2);
+		$entry = substr_replace($entry, chr($type), 0x42, 1);
+		$entry = substr_replace($entry, chr(1), 0x43, 1); // colour: black
+		$entry = substr_replace($entry, str_repeat(pack('V', 0xFFFFFFFF), 3), 0x44, 12); // no siblings, no children: the readers scan flat
+		$entry = substr_replace($entry, pack('V', $start), 0x74, 4);
+		$entry = substr_replace($entry, pack('VV', $size, 0), 0x78, 8);
+		return $entry;
+	}
 }

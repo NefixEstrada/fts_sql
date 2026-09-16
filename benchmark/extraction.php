@@ -48,6 +48,12 @@ declare(strict_types=1);
  *                       --pdf=/path/to/PDF32000_2008.pdf (the file is not in
  *                       the repository; the numbers are what the open issue
  *                       resolved on)
+ *   ppt_in_budget       a many-slide .ppt from the same builder the unit
+ *                       fixtures use — the first library-backed extractor,
+ *                       so its numbers carry the reader's own memory
+ *                       profile, which is what Milestone 4 rides on
+ *   ppt_over_budget     1.5× the budget of slides: the sink fills and the
+ *                       slide walk stops early
  *
  * Peaks are marginal: memory_reset_peak_usage() before each scenario, the
  * delta of memory_get_peak_usage(true) after. Leaves nothing behind (the
@@ -57,8 +63,10 @@ declare(strict_types=1);
 
 use OCA\FtsSql\ConfigLexicon;
 use OCA\FtsSql\Service\ExtractionService;
+use OCA\FtsSql\Tests\Fixtures;
 
 require __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../tests/Fixtures.php';
 
 // The ceiling that matters is Nextcloud's documented 512 MB floor — the
 // extraction runs inside a Nextcloud process — so the benchmark raises its
@@ -83,6 +91,8 @@ const EXPECTED = [
 	// the reference ISO accepts either designed bound: which of the
 	// budget or the clock bites first depends on the host's speed
 	'pdf_iso_reference' => ['budget cut', 'parser gave up'],
+	'ppt_in_budget' => 'complete',
+	'ppt_over_budget' => 'budget cut',
 ];
 
 /**
@@ -135,12 +145,15 @@ foreach ([
 	'odt_in_budget' => ['odt', 1048576, false],
 	'pdf_in_budget' => ['pdf', 1048576, false],
 	'pdf_encrypted_in_budget' => ['pdf', 1048576, true],
+	'ppt_in_budget' => ['ppt', 1048576, false],
+	'ppt_over_budget' => ['ppt', BUDGET * 3 / 2, false],
 ] as $name => [$extension, $textBytes, $encrypted]) {
 	$text = textUntil($bodies, (int)$textBytes);
 	$bytes = $extension === 'docx' ? docxBytes(paragraphsOf($text))
 		: ($extension === 'xlsx' ? xlsxBytes(cellStringsOf($text))
 		: ($extension === 'odt' ? odtBytes(paragraphsOf($text))
-		: pdfBytes(paragraphsOf($text), $encrypted)));
+		: ($extension === 'ppt' ? Fixtures::ppt(slidesOf($text))
+		: pdfBytes(paragraphsOf($text), $encrypted))));
 
 	$scenarios[$name] = measure($bytes, $extension);
 	$s = $scenarios[$name];
@@ -282,6 +295,16 @@ function cellStringsOf(string $text): array {
 		$strings[] = implode(' ', $chunk);
 	}
 	return $strings;
+}
+
+/**
+ * The same paragraphs as a deck: six bullets per slide, the shape a
+ * real presentation holds them in.
+ *
+ * @return list<list<string>>
+ */
+function slidesOf(string $text): array {
+	return array_chunk(paragraphsOf($text), 6);
 }
 
 /**

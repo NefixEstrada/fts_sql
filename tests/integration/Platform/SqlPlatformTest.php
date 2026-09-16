@@ -97,7 +97,10 @@ class SqlPlatformTest extends TestCase {
 	 * their body text, on whatever engine this instance runs. The
 	 * containers are real zips built at run time; what the platform sees is
 	 * what any provider hands over — the bytes, base64, and the path as the
-	 * title.
+	 * title. Milestone 4 adds the .ppt over the same assertion: the
+	 * compound file the app's own gate reads and the scoped PhpOffice
+	 * reader parses, both served by the app autoloader alone — the
+	 * production shape, since nothing loads vendor/ here.
 	 */
 	public function testOfficeFormatsAreFoundByTheirBodyText(): void {
 		$owner = new DocumentAccess('biel');
@@ -109,6 +112,10 @@ class SqlPlatformTest extends TestCase {
 			['sortida-museu.odt', Fixtures::odf(
 				'<text:p>una sortida al museu amb tota la classe</text:p>',
 			)],
+			['sortida-museu.ppt', Fixtures::ppt([
+				['sortida al museu de ciències'],
+				['confirma el pagament del bus'],
+			])],
 		];
 
 		foreach ($documents as [$name, $bytes]) {
@@ -122,9 +129,11 @@ class SqlPlatformTest extends TestCase {
 		$viewer = new DocumentAccess();
 		$viewer->setViewerId('biel');
 
-		$this->assertSame(2, $this->search('museu', $viewer)->getTotal(), 'both formats found by body text');
+		$this->assertSame(3, $this->search('museu', $viewer)->getTotal(), 'all three formats found by body text');
 		// And by a word only the odt holds.
 		$this->assertSame(1, $this->search('classe', $viewer)->getTotal());
+		// And one only the ppt holds.
+		$this->assertSame(1, $this->search('pagament', $viewer)->getTotal());
 	}
 
 	public function testADocumentWithoutTokensIsRefused(): void {
