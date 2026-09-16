@@ -239,9 +239,9 @@ Observable state: an instance on any of the three engines indexes `.txt`, `.md`,
 
 Delivers everything under Interfaces. Does not deliver any content extraction.
 
-### Milestone 2: OOXML, ODF and EPUB
+### Milestone 2: OOXML and ODF
 
-Observable state: `.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods`, `.odp` and `.epub` are found by their body text.
+Observable state: `.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods` and `.odp` are found by their body text.
 
 Delivered with the project's own `XMLReader` extractors: PhpSpreadsheet measured at +595.9 MiB and 31.8 s on a 1.09 MiB `.xlsx` where a targeted `XMLReader` pass cost +0.3 MiB and 1.0 s for byte-identical output. Does not deliver any bundled library.
 
@@ -636,7 +636,7 @@ AGPL-3.0-or-later, REUSE-compliant. The libraries the later milestones bundle ar
 
 ## Resolved issues
 
-- None yet.
+- **EPUB dropped from Milestone 2.** The draft listed `.epub` beside the office formats — a zip of XML that needs no library, like they do. Dropped before the first extractor was written: not needed here. An `.epub` is indexed on title, access and tags with the unsupported cause, like PDF and `.zip`; and the container-plus-XMLReader shape it would have used is already proven by OOXML and ODF, should it ever come back.
 
 ## Alternatives considered
 
