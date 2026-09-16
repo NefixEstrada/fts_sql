@@ -19,6 +19,11 @@
 			<directory name="vendor" />
 		</ignoreFiles>
 	</projectFiles>
+	<!-- When the first runtime dependency lands and lib/Vendor exists, it
+	     needs an ignoreFiles entry: php-scoper's generated output is not
+	     this app's code to keep type-clean. Psalm errors on an ignore
+	     pointing at a path that does not exist yet, so the entry cannot
+	     come earlier than the directory. -->
 	<!-- The OCP interfaces come from the nextcloud/ocp dev dependency, not from a server checkout. -->
 	<extraFiles>
 		<directory name="vendor/nextcloud/ocp" />

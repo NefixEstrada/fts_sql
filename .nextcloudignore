@@ -31,8 +31,11 @@
 /psalm.xml
 /rename.sh
 /README.md
+/scoper.inc.php
 /src
 /test-results
 /tests
+/tools
 /vendor
+/vendor-bin
 /vite.config.js

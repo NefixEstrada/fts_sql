@@ -19,5 +19,6 @@ $config
 	->notPath('build')
 	->notPath('node_modules')
 	->notPath('vendor')
+	->notPath('lib/Vendor')
 	->in(__DIR__);
 return $config;

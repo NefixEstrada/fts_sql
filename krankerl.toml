@@ -7,6 +7,9 @@
 # .nextcloudignore. `make appstore` does the same without krankerl.
 [package]
 before_cmds = [
-    "npm ci",
-    "npm run build",
+	# Runs the scoping post-install hook in this checkout, so the archive
+	# carries lib/Vendor when runtime dependencies exist.
+	"composer install --no-dev -o --no-interaction",
+	'npm ci',
+	'npm run build'
 ]

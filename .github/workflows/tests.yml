@@ -52,6 +52,13 @@ jobs:
       - name: Composer validate
         run: composer validate --no-check-publish
 
+      # The bundling pipeline of DESIGN.md's Milestone 3, proven before the
+      # first runtime library arrives: a scratch path-repository project is
+      # scoped with the app's real prefix and the classes have to land in
+      # lib/Vendor, where Nextcloud's autoloader serves them. Network-free.
+      - name: Vendor scoping self-test
+        run: composer run test:scoping
+
   engines:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
