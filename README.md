@@ -74,4 +74,24 @@ locally (disk); they run in CI —
 Nextcloud against all four engines from the official `continuous-integration-*`
 images and runs both suites on each.
 
+## Benchmark
+
+The quality stage (DESIGN.md, "Background") indexes the fixed corpus —
+5,000 Wikipedia opening paragraphs, a third each in Catalan, Spanish and
+English, under `benchmark/corpus/` — through the platform's own interface
+and scores query sets whose answers are known by construction: a
+distinctive word of a document's title has to find that document in the
+top ten, and a word the corpus does not hold has to find nothing.
+
+```console
+$ docker exec -u www-data <nextcloud-container> \
+    php /var/www/html/apps-extra/fts_sql/benchmark/quality.php
+```
+
+It runs against whatever engine that instance uses, cleans up after
+itself (everything is indexed under the `benchmark` provider and
+removed), and ends with one JSON line — keep it under
+`benchmark/results/` to compare a later change against today's
+measurement (PostgreSQL 16: precision@10 0.9524, index 33 s).
+
 [docker-dev]: https://github.com/nextcloud/nextcloud-docker-dev

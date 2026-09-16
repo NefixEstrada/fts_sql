@@ -1,0 +1,1 @@
+{"engine":"postgres","language":"simple","indexed":5001,"failed":0,"queries":189,"precision_at_10":0.9524,"negatives":25,"negatives_clean":true,"index_ms":32774,"search_ms":606}

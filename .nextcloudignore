@@ -12,6 +12,7 @@
 /.php-cs-fixer.dist.php
 /.php-cs-fixer.cache
 /.zcode
+/benchmark
 /DESIGN.md
 /build
 /composer.json
