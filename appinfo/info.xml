@@ -18,7 +18,7 @@ PDF arrive in later milestones, still with no external service and no external b
 	<author>Néfix Estrada</author>
 	<namespace>FtsSql</namespace>
 	<category>search</category>
-	<bugs>TODO your issue tracker</bugs>
+	<bugs>https://github.com/nefixestrada/fts_sql/issues</bugs>
 	<dependencies>
 		<php min-version="8.2"/>
 		<database min-version="14">pgsql</database>
@@ -27,12 +27,12 @@ PDF arrive in later milestones, still with no external service and no external b
 		<nextcloud min-version="34" max-version="34"/>
 	</dependencies>
 	<repair-steps>
-		<install>
-			<step>OCA\FtsSql\Migration\CreateSearchArtefact</step>
-		</install>
 		<post-migration>
 			<step>OCA\FtsSql\Migration\CreateSearchArtefact</step>
 		</post-migration>
+		<install>
+			<step>OCA\FtsSql\Migration\CreateSearchArtefact</step>
+		</install>
 	</repair-steps>
 	<settings>
 		<admin>OCA\FtsSql\Settings\Admin</admin>
