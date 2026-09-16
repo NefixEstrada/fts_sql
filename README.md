@@ -37,9 +37,22 @@ bind-mounted as `apps-extra/fts_sql`:
 ```console
 $ cd /path/to/nextcloud-docker-dev
 $ docker compose up -d stable34
-$ ./scripts/occ.sh stable34 -- app:enable fts_sql     # runs pending migrations
+$ ./scripts/occ.sh stable34 -- app:enable fts_sql     # runs pending migrations + the artefact repair step
 $ ./scripts/occ.sh stable34 -- db:schema:export       # inspect the tables
 ```
+
+Select the platform for the framework and run it end to end:
+
+```console
+$ ./scripts/occ.sh stable34 -- config:app:set fulltextsearch search_platform \
+    --value 'OCA\FtsSql\Platform\SqlPlatform'
+$ ./scripts/occ.sh stable34 -- fulltextsearch:index -r
+$ ./scripts/occ.sh stable34 -- fulltextsearch:search <user> <needle>
+$ ./scripts/occ.sh stable34 -- fulltextsearch:test   # the framework's own smoke test
+```
+
+After changing the `language` setting or a failed run, the remedy is always
+`fulltextsearch:reset` (it asks for confirmation) followed by another index.
 
 `fulltextsearch` and `files_fulltextsearch` (stable34 branches) sit next to it
 in `apps-extra/`. The engine-specific overlay — PostgreSQL 16 instead of
