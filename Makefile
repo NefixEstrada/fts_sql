@@ -11,10 +11,10 @@ artifact := $(build_dir)/artifacts/$(app_name)-$(version).tar.gz
 
 all: build
 
-# Production frontend build. Skipping this ships the plain-JavaScript page instead.
+# No frontend to build yet: the app's only UI is the admin card inside the
+# fulltextsearch settings section, which arrives with the platform work. When
+# it does, this target goes back to `npm ci && npm run build`.
 build:
-	npm ci
-	npm run build
 
 # Validate appinfo/info.xml against the app store schema (needs xmllint: libxml2-utils on
 # Debian/Ubuntu, preinstalled on macOS). Also catches TODO placeholders left by rename.sh.

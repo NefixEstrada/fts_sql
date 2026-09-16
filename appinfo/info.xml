@@ -26,17 +26,4 @@ PDF arrive in later milestones, still with no external service and no external b
 		<database>sqlite</database>
 		<nextcloud min-version="34" max-version="34"/>
 	</dependencies>
-	<settings>
-		<admin>OCA\FtsSql\Settings\AdminSettings</admin>
-		<admin-section>OCA\FtsSql\Settings\AdminSection</admin-section>
-	</settings>
-	<navigations>
-		<navigation>
-			<id>fts_sql</id>
-			<name>FTS SQL</name>
-			<route>fts_sql.page.index</route>
-			<icon>app.svg</icon>
-			<order>80</order>
-		</navigation>
-	</navigations>
 </info>
