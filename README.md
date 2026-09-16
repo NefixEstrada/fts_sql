@@ -121,4 +121,24 @@ removed), and ends with one JSON line — keep it under
 `benchmark/results/` to compare a later change against today's
 measurement (PostgreSQL 16: precision@10 0.9524, index 33 s).
 
+The extraction stage measures the extractors on the same footing: the
+same corpus, packed at run time into containers shaped like the real
+applications write them, extracted through `ExtractionService` — no
+database involved, so it also runs in `nix develop`:
+
+```console
+$ docker exec -u www-data <nextcloud-container> \
+    php /var/www/html/apps-extra/fts_sql/benchmark/extraction.php
+```
+
+One batch scenario (a full corpus of corpus-sized documents — the shape
+of a real indexing run) and one file per extractor and per boundary:
+within the budget, over it (the sink fills and the walk stops early),
+and past the entry read cap (the refusal boundary, documented rather
+than hidden). Peaks are marginal, measured under the 512 MB ceiling
+Nextcloud documents. Today's container numbers: 0.9 ms per document in
+the batch, a 1 MiB-text docx complete at +6 MiB peak, and the over-budget
+docx cut at the budget with +14.7 MiB — the numbers the Milestone 3 PDF
+route decision reads.
+
 [docker-dev]: https://github.com/nextcloud/nextcloud-docker-dev

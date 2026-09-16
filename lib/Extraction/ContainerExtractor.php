@@ -21,13 +21,14 @@ use Throwable;
  * (DESIGN.md, "The framework contract").
  *
  * The entry read cap scales with the budget rather than sitting at a fixed
- * size: XML overhead over its text runs 2–3× in real office files (every
- * run is a w:t/a:t element), so a budget-sized text needs roughly that
- * multiple of XML to be read whole.
+ * size: office XML runs 2–4× the size of the text it carries (every run is
+ * a w:t/a:t element with its properties), so eight budgets of XML headroom
+ * let a budget-sized extraction always finish and reach the sink's early
+ * stop instead of the cap; the read cap stays what a zip bomb hits.
  */
 abstract class ContainerExtractor implements IExtractor {
 	private const ENTRY_FLOOR = 8388608;
-	private const ENTRY_MULTIPLE = 4;
+	private const ENTRY_MULTIPLE = 8;
 
 	public function extract($stream, string $extension, int $budget): ExtractionResult {
 		$sink = new TextSink($budget);
