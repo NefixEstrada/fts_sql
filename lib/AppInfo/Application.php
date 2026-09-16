@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace OCA\FtsSql\AppInfo;
 
+use OCA\FtsSql\ConfigLexicon;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -18,6 +19,7 @@ use OCP\AppFramework\Bootstrap\IRegistrationContext;
 /**
  * The app's entry point. Nextcloud instantiates this class for every request that
  * touches the app, so keep it cheap: register things here, do not do work here.
+ * The platform itself is declared in info.xml, not here.
  */
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'fts_sql';
@@ -31,6 +33,7 @@ class Application extends App implements IBootstrap {
 	 * query the database or use \OC::$server.
 	 */
 	public function register(IRegistrationContext $context): void {
+		$context->registerConfigLexicon(ConfigLexicon::class);
 	}
 
 	/**

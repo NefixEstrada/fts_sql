@@ -22,6 +22,8 @@
 	<!-- The OCP interfaces come from the nextcloud/ocp dev dependency, not from a server checkout. -->
 	<extraFiles>
 		<directory name="vendor/nextcloud/ocp" />
+		<!-- Server-internal full text search models the OCP package does not ship. -->
+		<directory name="tests/stubs" />
 	</extraFiles>
 	<issueHandlers>
 		<!-- The OCP of Nextcloud 33 documents schema methods with Doctrine types the app does not ship. -->
