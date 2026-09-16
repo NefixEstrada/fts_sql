@@ -111,8 +111,15 @@ class SqlPlatformTest extends TestCase {
 	 * below the 2 MiB budget. The platform halves the content and retries —
 	 * up to four times — and the row lands truncated: the document is still
 	 * indexed, still findable by what survived, and still reports ok.
+	 *
+	 * PostgreSQL only: the ceiling is a tsvector property; MySQL, MariaDB
+	 * and SQLite have none and store the whole budget-sized content.
 	 */
 	public function testADocumentTheEngineRefusesLandsTruncated(): void {
+		if (\OCP\Server::get(\OCP\IDBConnection::class)->getDatabaseProvider() !== \OCP\IDBConnection::PLATFORM_POSTGRES) {
+			$this->markTestSkipped('the tsvector ceiling is a PostgreSQL property');
+		}
+
 		$tokens = [];
 		for ($i = 0; $i < 80000; $i++) {
 			$tokens[] = sprintf('zzqj%08d', $i);

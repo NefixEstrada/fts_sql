@@ -39,6 +39,11 @@ final class SearchService {
 		foreach ($search->arrayParams as $name) {
 			$types[$name] = IQueryBuilder::PARAM_STR_ARRAY;
 		}
+		// LIMIT and OFFSET are bound as integers: as strings PostgreSQL
+		// coerces them, but MySQL and MariaDB answer SQLSTATE 42000 with
+		// LIMIT '10'.
+		$types['limit'] = IQueryBuilder::PARAM_INT;
+		$types['offset'] = IQueryBuilder::PARAM_INT;
 
 		$rows = $this->db->executeQuery($search->pageSql, $search->parameters, $types)->fetchAll();
 		$total = (int)$this->db->executeQuery($search->countSql, $search->parameters, $types)->fetchOne();

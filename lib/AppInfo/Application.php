@@ -15,6 +15,7 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\IDBConnection;
 
 /**
  * The app's entry point. Nextcloud instantiates this class for every request that
@@ -37,9 +38,19 @@ class Application extends App implements IBootstrap {
 	}
 
 	/**
-	 * Runs after registration, when the DI container is ready. Use it for work that
-	 * needs services; still keep it light.
+	 * FTS5 virtual tables declare their columns without a type, which
+	 * Doctrine's SQLite introspection refuses ("Unknown database type"),
+	 * taking every later schema introspection with it: any app's next
+	 * migration, occ db:schema:export, our own tests. Map the empty type to
+	 * text while this app is enabled — idempotent, once per request.
 	 */
 	public function boot(IBootContext $context): void {
+		$context->injectFn(function (IDBConnection $db): void {
+			if ($db->getDatabaseProvider() !== IDBConnection::PLATFORM_SQLITE) {
+				return;
+			}
+			/** @psalm-suppress DeprecatedMethod the recommended replacement covers platform detection, not type-mapping registration */
+			$db->getDatabasePlatform()->registerDoctrineTypeMapping('', 'text');
+		});
 	}
 }

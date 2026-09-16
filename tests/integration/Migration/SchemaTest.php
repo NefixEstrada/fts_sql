@@ -44,7 +44,10 @@ class SchemaTest extends TestCase {
 		$this->assertTrue($unique->isUnique());
 		$this->assertSame(['provider_id', 'document_id'], $unique->getColumns());
 
-		$this->assertNull($table->getColumn('content')->getLength());
+		// null on PostgreSQL and SQLite; MySQL introspection reports LONGTEXT
+		// as 0. Both mean "no length declared": a length would introspect as
+		// 65,535 — the TEXT regression that would sit below the budget.
+		$this->assertContains($table->getColumn('content')->getLength(), [null, 0]);
 	}
 
 	public function testAccessTable(): void {
