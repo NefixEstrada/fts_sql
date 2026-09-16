@@ -13,6 +13,22 @@ text search. The design lives in [`DESIGN.md`](DESIGN.md); read it first.
 
 [fts]: https://github.com/nextcloud/fulltextsearch
 
+## Supported formats
+
+| Format | What is indexed |
+| --- | --- |
+| Plain text — `.txt`, `.md`, `.csv`, `.log` and every extension nobody declared otherwise | the content as-is |
+| OOXML — `.docx`, `.xlsx`, `.pptx` | body text, extracted by the app's own `XMLReader` passes over the container |
+| ODF — `.odt`, `.ods`, `.odp` | body text, one pass over `content.xml` |
+| Everything else — PDF, legacy `.doc`/`.xls`/`.ppt`, `.epub`, archives, executables, images, audio and video | title, access and tags only, with the reason recorded on the document |
+
+Extraction is pure PHP over streams — no Elasticsearch, no Tika, no
+external binary, no bundled library. An encrypted document is reported as
+such; a document whose text was cut at the content budget is indexed on
+what survived and flagged; a document the parser gave up on is indexed on
+what was recovered, with the cause. PDF and the legacy binary Office
+formats arrive in later milestones.
+
 ## Tooling
 
 Dependencies live in the Nix flake; work inside it:
@@ -65,6 +81,17 @@ Run the whole suite, integration included, inside the container:
 $ docker exec -u www-data -w /var/www/html/apps-extra/fts_sql \
     master-stable34-1 phpunit -c tests/phpunit.xml
 ```
+
+A suite run costs the instance its files: the server's
+`Test\TestCase::tearDownAfterClass()` wipes `oc_storages` and
+`oc_filecache` after every test class and then deletes the data
+directory's "stray" files — the ones the emptied cache no longer knows.
+So it is not only a container recreation that loses the test files; every
+integration run does. The remedy is the same: recreate them under
+`data/<user>/files/`, `occ files:scan --quiet <user>`, reset the index and
+reindex. A search that comes back empty right after a suite is the
+platform tables emptied by a tearDown while the framework's book still
+marks everything indexed — `occ fulltextsearch:reset`, then index again.
 
 The web frontend answers at `http://stable34.local` (add it to `/etc/hosts`,
 or curl with `-H 'Host: stable34.local'` against the proxy port). The

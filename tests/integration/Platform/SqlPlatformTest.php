@@ -13,6 +13,7 @@ namespace OCA\FtsSql\Tests\Integration\Platform;
 use OC\FullTextSearch\Model\DocumentAccess;
 use OC\FullTextSearch\Model\IndexDocument;
 use OCA\FtsSql\Platform\SqlPlatform;
+use OCA\FtsSql\Tests\Fixtures;
 use OCA\FullTextSearch\Model\Index;
 use OCA\FullTextSearch\Model\SearchRequest;
 use OCA\FullTextSearch\Model\SearchResult;
@@ -91,6 +92,41 @@ class SqlPlatformTest extends TestCase {
 		$this->assertSame(0, $this->search('"riu corrents"', $viewer)->getTotal(), 'phrases keep their word order');
 	}
 
+	/**
+	 * DESIGN.md Milestone 2's observable state: .docx and .odt are found by
+	 * their body text, on whatever engine this instance runs. The
+	 * containers are real zips built at run time; what the platform sees is
+	 * what any provider hands over — the bytes, base64, and the path as the
+	 * title.
+	 */
+	public function testOfficeFormatsAreFoundByTheirBodyText(): void {
+		$owner = new DocumentAccess('biel');
+
+		$documents = [
+			['sortida-museu.docx', Fixtures::docx(
+				'<w:p><w:r><w:t xml:space="preserve">sortida al </w:t></w:r><w:r><w:t>museu de ciències</w:t></w:r></w:p>',
+			)],
+			['sortida-museu.odt', Fixtures::odf(
+				'<text:p>una sortida al museu amb tota la classe</text:p>',
+			)],
+		];
+
+		foreach ($documents as [$name, $bytes]) {
+			$index = $this->platform->indexDocument(
+				$this->containerDocument($name, $bytes, $owner),
+			);
+			$this->assertTrue($index->isStatus(IIndex::INDEX_DONE), "$name should be indexed");
+			$this->assertTrue($index->isStatus(IIndex::INDEX_CONTENT), "$name body text should be extracted");
+		}
+
+		$viewer = new DocumentAccess();
+		$viewer->setViewerId('biel');
+
+		$this->assertSame(2, $this->search('museu', $viewer)->getTotal(), 'both formats found by body text');
+		// And by a word only the odt holds.
+		$this->assertSame(1, $this->search('classe', $viewer)->getTotal());
+	}
+
 	public function testADocumentWithoutTokensIsRefused(): void {
 		$noAccess = new DocumentAccess();
 
@@ -159,6 +195,20 @@ class SqlPlatformTest extends TestCase {
 		$document->setAccess($access);
 		$document->setTitle("Escola/Sortida al Museu de Ciències $id.txt");
 		$document->setContent(base64_encode($content), IIndexDocument::ENCODED_BASE64);
+		$document->setModifiedTime(time());
+		return $document;
+	}
+
+	/**
+	 * Same shape as document(), with the container's bytes and the format's
+	 * extension in the title path.
+	 */
+	private function containerDocument(string $name, string $bytes, DocumentAccess $access): IIndexDocument {
+		$document = new IndexDocument('test_provider', $name);
+		$document->setIndex(new Index('test_provider', $name));
+		$document->setAccess($access);
+		$document->setTitle("Escola/Sortida al Museu de Ciències/$name");
+		$document->setContent(base64_encode($bytes), IIndexDocument::ENCODED_BASE64);
 		$document->setModifiedTime(time());
 		return $document;
 	}
