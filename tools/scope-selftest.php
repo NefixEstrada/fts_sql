@@ -135,6 +135,32 @@ try {
 		public static function addViaMath(int $a, int $b): int {
 			return Math::add($a, $b);
 		}
+
+		/**
+		 * The idiom php-scoper cannot see: a class name built from a
+		 * string. The pipeline's string-namespace patcher has to
+		 * prefix the literal, or the scoped copy asks for a class
+		 * that exists nowhere — loadable in development through
+		 * vendor/, dead in production.
+		 */
+		public static function dynamicallyBuilt(): string {
+			$suffix = 'Part';
+			$class = 'FtsSqlFixture\ScopedShape\\' . $suffix;
+			return $class::name();
+		}
+	}
+	PHP);
+	file_put_contents($work . '/shapefixture/src/Part.php', <<<'PHP'
+	<?php
+
+	declare(strict_types=1);
+
+	namespace FtsSqlFixture\ScopedShape;
+
+	final class Part {
+		public static function name(): string {
+			return 'the dynamically built class answered';
+		}
 	}
 	PHP);
 
@@ -288,6 +314,8 @@ try {
 	if (class_exists($shape)) {
 		selftest_check($report, $shape::addViaMath(2, 3) === 5,
 			'the scoped shape cannot reach the scoped transitive Math: a closure miss');
+		selftest_check($report, $shape::dynamicallyBuilt() === 'the dynamically built class answered',
+			'the scoped shape cannot build a class name from a string: an unpatched namespace literal');
 	}
 
 	// --- the classmap case: one global class at the prefix root, and

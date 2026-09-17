@@ -37,8 +37,9 @@ if (!is_string($cwd)) {
 }
 $root = realpath($cwd) ?: $cwd;
 
+$packages = scoping_installed_runtime_packages($root);
 $byOrganisation = [];
-foreach (scoping_installed_runtime_packages($root) as $package) {
+foreach ($packages as $package) {
 	$parts = explode('/', $package['name'], 2);
 	if (count($parts) !== 2) {
 		scoping_error('package name without a vendor organisation: ' . $package['name']);
@@ -53,20 +54,56 @@ if ($byOrganisation === []) {
 
 ksort($byOrganisation);
 $finders = [];
-foreach ($byOrganisation as $organisation => $packages) {
-	sort($packages, SORT_STRING);
+foreach ($byOrganisation as $organisation => $organisationPackages) {
+	sort($organisationPackages, SORT_STRING);
 	$finders[] = Finder::create()
 		->files()
 		->in($root . '/vendor/' . $organisation)
 		->path(array_map(
 			static fn (string $package): string => '~^' . preg_quote($package, '~') . '/~',
-			$packages,
+			$organisationPackages,
 		))
 		->exclude(['test', 'tests', 'Tests', 'composer', 'bin'])
 		->notName('autoload.php');
 }
 
+// php-scoper rewrites every namespaced reference it can see in the code;
+// a class name built by string concatenation is invisible to it. PhpWord
+// constructs a dozen of them — its collections, its writers, its factory
+// — so the string literals naming a scoped package's own namespaces are
+// prefixed here, root by root, each root read from the package's own
+// composer.json rather than listed by hand. Only literals that begin at
+// a quote are touched: in this tree every dynamic construction starts
+// its string at the namespace root.
+$namespaceRoots = [];
+foreach ($packages as $package) {
+	$manifest = json_decode((string)file_get_contents($package['path'] . '/composer.json'), true);
+	if (!is_array($manifest)) {
+		scoping_error('cannot read the composer.json of ' . $package['name'] . ' for its namespace roots');
+	}
+	foreach (array_keys(is_array($manifest['autoload']['psr-4'] ?? null) ? $manifest['autoload']['psr-4'] : []) as $namespace) {
+		$namespace = trim((string)$namespace, '\\') . '\\';
+		if ($namespace !== '\\') {
+			$namespaceRoots[] = $namespace;
+		}
+	}
+}
+$namespaceRoots = array_values(array_unique($namespaceRoots));
+sort($namespaceRoots, SORT_STRING);
+
+$stringNamespacePatcher = static function (string $filePath, string $prefix, string $content) use ($namespaceRoots): string {
+	foreach ($namespaceRoots as $namespaceRoot) {
+		// single-quoted source: one backslash per separator
+		$content = str_replace("'" . $namespaceRoot, "'" . $prefix . '\\' . $namespaceRoot, $content);
+		// double-quoted source: each separator escaped
+		$double = static fn (string $ns): string => str_replace('\\', '\\\\', $ns);
+		$content = str_replace('"' . $double($namespaceRoot), '"' . $double($prefix . '\\' . $namespaceRoot), $content);
+	}
+	return $content;
+};
+
 return [
 	'prefix' => SCOPING_PREFIX,
 	'finders' => $finders,
+	'patchers' => [$stringNamespacePatcher],
 ];
