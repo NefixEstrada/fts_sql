@@ -418,6 +418,195 @@ final class Fixtures {
 		]);
 	}
 
+	// ---- Excel 97-2003 fixtures ---------------------------------------------
+
+	/**
+	 * A readable .xls: string cells in column A beside numeric ones,
+	 * written by the scoped PhpSpreadsheet writer — the same library
+	 * the extractor reads with, so the fixture is exactly what that
+	 * writer produces. Strings are set explicitly: a cell value that
+	 * begins with "=" would otherwise be written as a formula.
+	 *
+	 * @param list<string> $strings one string cell per row
+	 */
+	public static function xls(array $strings): string {
+		$book = new \OCA\FtsSql\Vendor\PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet = $book->getActiveSheet();
+		foreach ($strings as $i => $string) {
+			$row = $i + 1;
+			$sheet->setCellValueExplicit('A' . $row, $string, \OCA\FtsSql\Vendor\PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+			$sheet->setCellValue('B' . $row, $row * 100 + 1);
+			$sheet->setCellValue('C' . $row, $row * 100 + 2);
+		}
+		$path = tempnam(sys_get_temp_dir(), 'fts-xls-') . '.xls';
+		(new \OCA\FtsSql\Vendor\PhpOffice\PhpSpreadsheet\Writer\Xls($book))->save($path);
+		$book->disconnectWorksheets();
+
+		$bytes = file_get_contents($path);
+		@unlink($path);
+		return $bytes === false ? '' : $bytes;
+	}
+
+	/**
+	 * The same workbook with a FILEPASS record spliced in after the
+	 * first (BOF) record: the File Protection Block's marker for an
+	 * encrypted workbook, the shape the extractor's own gate reads.
+	 *
+	 * @param list<string> $strings
+	 */
+	public static function xlsEncryptedToken(array $strings): string {
+		$path = tempnam(sys_get_temp_dir(), 'fts-xls-') . '.xls';
+		file_put_contents($path, self::xls($strings));
+		$ole = \OCA\FtsSql\Extraction\Ppt\OleFile::open($path);
+		$workbook = $ole->stream('Workbook') ?? $ole->stream('Book');
+		@unlink($path);
+		if ($workbook === null) {
+			throw new RuntimeException('the xls fixture carries no Workbook stream');
+		}
+
+		$bofLength = 4 + (ord($workbook[2]) | ord($workbook[3]) << 8);
+		$spliced = substr($workbook, 0, $bofLength) . pack('vv', 0x002F, 0) . substr($workbook, $bofLength);
+
+		return self::oleContainer([
+			['name' => 'Workbook', 'data' => $spliced],
+		])['bytes'];
+	}
+
+	// ---- Word 97-2003 fixtures ------------------------------------------------
+
+	/**
+	 * A readable .doc: a simple-layout document, the shape the PhpWord
+	 * reader actually parses — the text as UTF-16LE in the WordDocument
+	 * stream where the paragraph table's FCs name it, one PAPX page per
+	 * batch of paragraphs, one CHPX run over the lot, and the section,
+	 * font and table structures the reader walks first. Word itself
+	 * writes more; nothing here is anything the reader refuses.
+	 *
+	 * @param list<string> $paragraphs
+	 */
+	public static function doc(array $paragraphs): string {
+		return self::docBuild($paragraphs, false);
+	}
+
+	/**
+	 * The same document with the FIB's fEncrypted flag set — the flag
+	 * the reader itself ignores and this app's gate reads.
+	 *
+	 * @param list<string> $paragraphs
+	 */
+	public static function docEncryptedFlag(array $paragraphs): string {
+		return self::docBuild($paragraphs, true);
+	}
+
+	/**
+	 * @param list<string> $paragraphs
+	 */
+	private static function docBuild(array $paragraphs, bool $encrypted): string {
+		$fibMin = 1024;
+
+		// the text: every paragraph, its \r, and a NUL unit to stop the
+		// reader's read-through at the paragraph's end
+		$text = '';
+		$fcs = [];
+		foreach ($paragraphs as $paragraph) {
+			$fcs[] = $fibMin + strlen($text);
+			$text .= self::pptUtf16($paragraph) . "\r\x00" . "\0\x00";
+		}
+		$textEnd = $fibMin + strlen($text);
+		$ccpText = array_sum(array_map(static fn (string $p): int => self::pptUtf16Units($p) + 1, $paragraphs));
+
+		// the PAPX pages: up to 28 paragraphs per page
+		$pages = array_chunk($fcs, 28);
+		// the section properties: one sprm, sprmSXaPage — enough for the
+		// reader to build the section style it reads back
+		$sepxAt = $textEnd;
+		$sepx = pack('v', 6) . pack('v', 0x701F) . pack('V', 12240);
+		$fkpStart = (int)ceil(($sepxAt + strlen($sepx)) / 512) * 512;
+		$chpxPage = $fkpStart + count($pages) * 512;
+		$length = $chpxPage + 512;
+
+		$wordDocument = str_repeat("\0", $length);
+		$wordDocument = substr_replace($wordDocument, pack('v', 0xA5EC), 0x00, 2); // wIdent
+		$wordDocument = substr_replace($wordDocument, pack('v', 0x00C1), 0x02, 2); // nFib
+		$flags = (1 << 3) | (1 << 6); // fExtChar: 16-bit text; fWhichTblStm: 1Table
+		if ($encrypted) {
+			$flags |= 1 << 7; // fEncrypted
+		}
+		$wordDocument = substr_replace($wordDocument, pack('v', $flags), 0x0A, 2);
+		$wordDocument = substr_replace($wordDocument, pack('v', 0x00C1), 0x0C, 2); // nFibBack
+		$wordDocument = substr_replace($wordDocument, pack('V', $length), 0x40, 4); // cbMac
+		$wordDocument = substr_replace($wordDocument, pack('V', $ccpText), 0x4C, 4); // ccpText
+		$wordDocument = substr_replace($wordDocument, pack('v', 0x5D), 0x98, 2); // cbRgFcLcb: the Word 97 block
+		$wordDocument = substr_replace($wordDocument, $text, $fibMin, strlen($text));
+		$wordDocument = substr_replace($wordDocument, $sepx, $sepxAt, strlen($sepx));
+
+		// the FIB's fc/lcb pairs at their documented places: PlcfSed
+		// (pair 7), PlcfBteChpx (13), PlcfBtePapx (14), SttbfFfn (16)
+		$papxPlcfLength = (count($pages) + 1) * 4 + count($pages) * 4;
+		$wordDocument = substr_replace($wordDocument, pack('VV', 0, 20), 0xCA, 8);
+		$wordDocument = substr_replace($wordDocument, pack('VV', 24, 12), 0xFA, 8);
+		$wordDocument = substr_replace($wordDocument, pack('VV', 36, $papxPlcfLength), 0x102, 8);
+		$wordDocument = substr_replace($wordDocument, pack('VV', 20, 4), 0x112, 8);
+
+		// the PAPX pages: rgfc, then one rgb byte per paragraph (with its
+		// twelve pad bytes), then the zero PAPX they point at; the count
+		// sits in the page's last byte
+		foreach ($pages as $i => $pageFcs) {
+			$page = str_repeat("\0", 512);
+			$at = 0;
+			foreach ($pageFcs as $fc) {
+				$page = substr_replace($page, pack('V', $fc), $at, 4);
+				$at += 4;
+			}
+			$page = substr_replace($page, pack('V', $textEnd), $at, 4);
+			$at += 4;
+			$papxAt = $at + count($pageFcs) * 13;
+			$papxAt += $papxAt % 2; // word aligned, as the rgb offset halves
+			foreach ($pageFcs as $ignored) {
+				$page = substr_replace($page, chr(intdiv($papxAt, 2)), $at, 1);
+				$at += 13;
+			}
+			$page = substr_replace($page, "\0\0\0\0", $papxAt, 4); // the PAPX itself: cb 0, istd 0
+			$page = substr_replace($page, chr(count($pageFcs)), 511, 1);
+			$wordDocument = substr_replace($wordDocument, $page, $fkpStart + $i * 512, 512);
+		}
+
+		// the CHPX page: one run over all the text, no style entry
+		$chpx = str_repeat("\0", 512);
+		$chpx = substr_replace($chpx, pack('V', $fibMin), 0, 4);
+		$chpx = substr_replace($chpx, pack('V', $textEnd), 4, 4);
+		$chpx = substr_replace($chpx, "\x01", 511, 1); // one rgfc pair, rgb 0: no style
+		$wordDocument = substr_replace($wordDocument, $chpx, $chpxPage, 512);
+
+		// the 1Table stream: PlcfSed, SttbfFfn, PlcfBteChpx, PlcfBtePapx,
+		// at the offsets the FIB names (0, 20, 24, 36)
+		$table = str_repeat("\0", 4096);
+		$table = substr_replace($table, pack('VV', 0, $ccpText) . pack('vVvV', 0, $sepxAt, 0, 0), 0, 20);
+		$table = substr_replace($table, pack('vv', 0, 0), 20, 4); // no fonts
+		$table = substr_replace($table, pack('VVV', $fibMin, $textEnd, intdiv($chpxPage, 512)), 24, 12);
+		// the plcf's CPs are one per page — its first paragraph's FC —
+		// with the text's end closing the range: the reader counts the
+		// pages from the length and skips exactly that many CPs
+		$plcf = '';
+		foreach ($pages as $pageFcs) {
+			$plcf .= pack('V', $pageFcs[0]);
+		}
+		$plcf .= pack('V', $textEnd);
+		foreach ($pages as $i => $ignored) {
+			$plcf .= pack('V', intdiv($fkpStart + $i * 512, 512));
+		}
+		$table = substr_replace($table, $plcf, 36, strlen($plcf));
+
+		return self::oleContainer([
+			['name' => 'WordDocument', 'data' => $wordDocument],
+			['name' => '1Table', 'data' => $table],
+		])['bytes'];
+	}
+
+	private static function pptUtf16Units(string $text): int {
+		return intdiv(strlen(self::pptUtf16($text)), 2);
+	}
+
 	// ---- PowerPoint 97 fixtures ----------------------------------------------
 
 	/**

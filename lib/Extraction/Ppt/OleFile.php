@@ -112,19 +112,19 @@ final class OleFile {
 
 	/**
 	 * One stream's sectors: every hop is checked against the table's
-	 * own bounds, no sector is visited twice, and the chain stops the
-	 * moment it has carried more sectors than the declared size needs —
-	 * a loop or a lying size costs the refusal, not the process.
+	 * own bounds and no sector is visited twice — a loop costs the
+	 * refusal, not the process. The chain is followed to its end
+	 * whatever the declared size, the reader's own tolerance: writers
+	 * leave stale allocation entries chained past a short stream's
+	 * last sector, and the declared size trims the bytes afterwards.
 	 */
 	private function readChain(int $start, int $size, int $sectorSize, string $fat, string $data, int $base): string {
 		$sectorCount = intdiv(strlen($data) - $base, $sectorSize);
-		$maxSectors = intdiv($size + $sectorSize - 1, $sectorSize) + 1;
 		$out = '';
 		$visited = [];
 		$sector = $start;
 		while ($sector !== self::END_OF_CHAIN) {
-			if (isset($visited[$sector]) || count($visited) >= $maxSectors
-				|| $sector < 0 || $sector >= $sectorCount) {
+			if (isset($visited[$sector]) || $sector < 0 || $sector >= $sectorCount) {
 				throw new ExtractionAbort(ExtractionCause::ParserGaveUp, 'the compound container chains a stream in a circle or past its own end');
 			}
 			$visited[$sector] = true;
@@ -218,11 +218,17 @@ final class OleFile {
 		}
 		$this->miniFat = $this->readChainCapped($miniFatStart, $numMiniFat);
 
-		// the mini-stream container hangs off the root entry, whose own
-		// size says how much of it there is
+		// the mini-stream container hangs off the root entry, and its
+		// sectors live in the main allocation table however small the
+		// container's own declared size: only streams below the
+		// threshold take the mini path
 		foreach ($this->entries as $entry) {
 			if ($entry['type'] === self::TYPE_ROOT) {
-				$this->miniStream = $this->readStream($entry['start'], $entry['size']);
+				if ($entry['start'] === self::END_OF_CHAIN || $entry['size'] === 0) {
+					return;
+				}
+				$container = $this->readChain($entry['start'], $entry['size'], self::SECTOR_SIZE, $this->fat, $this->bytes, self::SECTOR_SIZE);
+				$this->miniStream = substr($container, 0, $entry['size']);
 				return;
 			}
 		}

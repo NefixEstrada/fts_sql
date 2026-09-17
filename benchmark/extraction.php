@@ -54,6 +54,15 @@ declare(strict_types=1);
  *                       profile, which is what Milestone 4 rides on
  *   ppt_over_budget     1.5× the budget of slides: the sink fills and the
  *                       slide walk stops early
+ *   xls_in_budget       a workbook of corpus string cells beside numeric
+ *                       ones, written by the reader's own writer — the
+ *                       shape the pre-design measurement
+ *                       (results/2026-09-16-xls.json) ran on
+ *   xls_over_budget     1.5× the budget of cells
+ *   doc_in_budget       a simple-layout document the fixture builder
+ *                       writes byte by byte: the FIB, the UTF-16 text,
+ *                       the paragraph and character pages
+ *   doc_over_budget     1.5× the budget of paragraphs
  *
  * Peaks are marginal: memory_reset_peak_usage() before each scenario, the
  * delta of memory_get_peak_usage(true) after. Leaves nothing behind (the
@@ -93,6 +102,13 @@ const EXPECTED = [
 	'pdf_iso_reference' => ['budget cut', 'parser gave up'],
 	'ppt_in_budget' => 'complete',
 	'ppt_over_budget' => 'budget cut',
+	'xls_in_budget' => 'complete',
+	// on a slow host the clock beats the budget: the per-cell deadline
+	// filter stops the load and the workbook is indexed on what
+	// survived — either bound is the designed outcome
+	'xls_over_budget' => ['budget cut', 'parser gave up'],
+	'doc_in_budget' => 'complete',
+	'doc_over_budget' => 'budget cut',
 ];
 
 /**
@@ -147,13 +163,19 @@ foreach ([
 	'pdf_encrypted_in_budget' => ['pdf', 1048576, true],
 	'ppt_in_budget' => ['ppt', 1048576, false],
 	'ppt_over_budget' => ['ppt', BUDGET * 3 / 2, false],
+	'xls_in_budget' => ['xls', 1048576, false],
+	'xls_over_budget' => ['xls', BUDGET * 3 / 2, false],
+	'doc_in_budget' => ['doc', 1048576, false],
+	'doc_over_budget' => ['doc', BUDGET * 3 / 2, false],
 ] as $name => [$extension, $textBytes, $encrypted]) {
 	$text = textUntil($bodies, (int)$textBytes);
 	$bytes = $extension === 'docx' ? docxBytes(paragraphsOf($text))
 		: ($extension === 'xlsx' ? xlsxBytes(cellStringsOf($text))
 		: ($extension === 'odt' ? odtBytes(paragraphsOf($text))
 		: ($extension === 'ppt' ? Fixtures::ppt(slidesOf($text))
-		: pdfBytes(paragraphsOf($text), $encrypted))));
+		: ($extension === 'xls' ? Fixtures::xls(cellStringsOf($text))
+		: ($extension === 'doc' ? Fixtures::doc(paragraphsOf($text))
+		: pdfBytes(paragraphsOf($text), $encrypted))))));
 
 	$scenarios[$name] = measure($bytes, $extension);
 	$s = $scenarios[$name];

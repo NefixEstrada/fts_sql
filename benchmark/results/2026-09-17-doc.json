@@ -1,0 +1,46 @@
+{
+ "stage": "extraction+doc",
+ "date": "2026-09-17",
+ "php": "8.2.33",
+ "issue": "DESIGN.md Milestone 4: .doc over the bundled, scoped PhpWord reader, with the piece-table caveat the design names",
+ "reader": "phpoffice/phpword 1.4.0 MsDoc, behind the app's own compound-file gate (fEncrypted read from the FIB — the reader itself ignores it)",
+ "fixture": "corpus paragraphs in a simple-layout document built byte by byte (tests/Fixtures.php::doc): FIB, UTF-16 text, one PAPX page per 28 paragraphs, one CHPX run, the section and font structures",
+ "scenarios": {
+  "doc_in_budget": {
+   "file_bytes": 2078208,
+   "text_bytes": 1048404,
+   "cause": "complete",
+   "ms": 255,
+   "peak_bytes": 8388608
+  },
+  "doc_over_budget": {
+   "file_bytes": 6219264,
+   "text_bytes": 2097147,
+   "cause": "budget cut",
+   "ms": 652,
+   "peak_bytes": 27004928
+  }
+ },
+ "container_run": {
+  "where": "nextcloud-docker-dev master-stable34-1 (the CI-equivalent PHP)",
+  "doc_in_budget": {
+   "file_bytes": 2078208,
+   "text_bytes": 1048404,
+   "cause": "complete",
+   "ms": 2449,
+   "peak_bytes": 8388608
+  },
+  "doc_over_budget": {
+   "file_bytes": 6219264,
+   "text_bytes": 2097147,
+   "cause": "budget cut",
+   "ms": 6492,
+   "peak_bytes": 27004928
+  }
+ },
+ "notes": {
+  "memory": "the reader's object model, same order as the ppt reader's: 8 MiB in budget, 26 MiB while filling the whole budget from a 6.07 MiB document — far under the 512 MiB floor",
+  "clock": "2.4 s in budget on the container PHP; a 20 MiB document scales past the 10 s clock there and stops between paragraphs with the time-budget cause and what survived",
+  "piece_table": "the design's documented caveat stands: a document saved with a piece table — the reader treats the paragraph table's FCs as direct byte offsets — reads as garbage or refuses, and costs itself with the parser-gave-up cause"
+ }
+}

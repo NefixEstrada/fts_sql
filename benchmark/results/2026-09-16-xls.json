@@ -1,0 +1,103 @@
+{
+ "stage": "xls pre-design measurement",
+ "date": "2026-09-16",
+ "php": "8.2.33",
+ "issue": "DESIGN.md Milestone 4: '.xls needs re-measuring once setReadFilter() drives it' (open issue: extraction in the benchmark)",
+ "fixture": "corpus text as 9-word explicit string cells in column A beside 4 numeric columns, written by the scoped PhpSpreadsheet Xls writer; one string per row",
+ "modes": {
+  "plain": "IOFactory::load",
+  "dataonly": "Xls reader, setReadDataOnly(true)",
+  "dataonly_filter": "setReadDataOnly(true) + an IReadFilter accepting every cell"
+ },
+ "runs": [
+  {
+   "target_text_bytes": 1048576,
+   "cells": 19178,
+   "file_bytes": 3778560,
+   "plain": {
+    "load_ms": 1960,
+    "walk_ms": 92,
+    "load_peak_bytes": 17903616,
+    "text_bytes": 1067797
+   },
+   "dataonly": {
+    "load_ms": 2321,
+    "walk_ms": 129,
+    "load_peak_bytes": 17903616,
+    "text_bytes": 1067797
+   },
+   "dataonly_filter": {
+    "load_ms": 1720,
+    "walk_ms": 94,
+    "load_peak_bytes": 17903616,
+    "text_bytes": 1067797
+   }
+  },
+  {
+   "target_text_bytes": 3145728,
+   "cells": 57197,
+   "file_bytes": 11296768,
+   "plain": {
+    "load_ms": 7242,
+    "walk_ms": 432,
+    "load_peak_bytes": 67829760,
+    "text_bytes": 3202975
+   },
+   "dataonly": {
+    "load_ms": 8006,
+    "walk_ms": 420,
+    "load_peak_bytes": 67829760,
+    "text_bytes": 3202975
+   },
+   "dataonly_filter": {
+    "load_ms": 8358,
+    "walk_ms": 421,
+    "load_peak_bytes": 67829760,
+    "text_bytes": 3202975
+   }
+  }
+ ],
+ "conclusion": {
+  "setReadFilter": "does not bound the Xls reader: peaks are byte-identical with and without the filter, and with readDataOnly — the memory is the cell object model, not styles or skipped ranges. The design's question has its answer: the filter is not a memory lever here.",
+  "memory": "~22x the text bytes, ~6x the file bytes: a 20 MiB workbook (the framework's own upstream gate) costs ~120 MiB of marginal peak — far under the 512 MiB floor that killed the PDF library route. The inherited PhpSpreadsheet profile is affordable.",
+  "time": "the binding constraint on slow hosts: the container PHP runs ~10x slower, so a 3 MiB-text workbook would spend ~80 s inside load(). The extractor therefore uses the read filter as a cooperative per-cell deadline — the reader consults it before creating each cell (Xls.php, five call sites), so cells stop loading when the clock trips and the document is indexed on what survived, the same honest boundary the PDF and PPT extractors document."
+ },
+ "where": "dev shell (nix develop); the extractor's own benchmark scenario measures the container side",
+ "extractor_scenarios": {
+  "note": "the extractor itself, over the same fixture shape, both hosts",
+  "dev_shell": {
+   "xls_in_budget": {
+    "file_bytes": 3004928,
+    "text_bytes": 1047635,
+    "cause": "complete",
+    "ms": 2630,
+    "peak_bytes": 18272256
+   },
+   "xls_over_budget": {
+    "file_bytes": 8978432,
+    "text_bytes": 2097144,
+    "cause": "budget cut",
+    "ms": 11114,
+    "peak_bytes": 54661120
+   }
+  },
+  "container_run": {
+   "where": "nextcloud-docker-dev master-stable34-1 (the CI-equivalent PHP)",
+   "xls_in_budget": {
+    "file_bytes": 3004928,
+    "text_bytes": 1047635,
+    "cause": "complete",
+    "ms": 8243,
+    "peak_bytes": 18272256
+   },
+   "xls_over_budget": {
+    "file_bytes": 8978432,
+    "text_bytes": 1296597,
+    "cause": "parser gave up",
+    "ms": 12286,
+    "peak_bytes": 54661120,
+    "note": "the wall-clock budget, not the content budget, is what stops this host: the per-cell deadline filter halts the load at 10 s and the workbook is indexed on the 1.23 MiB that survived — the same honest boundary the PDF extractor documents for the reference ISO"
+   }
+  }
+ }
+}

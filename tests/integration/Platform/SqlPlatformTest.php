@@ -97,10 +97,11 @@ class SqlPlatformTest extends TestCase {
 	 * their body text, on whatever engine this instance runs. The
 	 * containers are real zips built at run time; what the platform sees is
 	 * what any provider hands over — the bytes, base64, and the path as the
-	 * title. Milestone 4 adds the .ppt over the same assertion: the
-	 * compound file the app's own gate reads and the scoped PhpOffice
-	 * reader parses, both served by the app autoloader alone — the
-	 * production shape, since nothing loads vendor/ here.
+	 * title. Milestone 4 adds the three legacy binary formats over the same
+	 * assertion — the .ppt, .xls and .doc behind this app's own
+	 * compound-file gate and the scoped PhpOffice readers, served by the
+	 * app autoloader alone: the production shape, since nothing loads
+	 * vendor/ here.
 	 */
 	public function testOfficeFormatsAreFoundByTheirBodyText(): void {
 		$owner = new DocumentAccess('biel');
@@ -116,6 +117,12 @@ class SqlPlatformTest extends TestCase {
 				['sortida al museu de ciències'],
 				['confirma el pagament del bus'],
 			])],
+			['sortida-museu.xls', Fixtures::xls([
+				'sortida al museu amb tota la classe',
+			])],
+			['sortida-museu.doc', Fixtures::doc([
+				'la visita al museu amb el pressupost',
+			])],
 		];
 
 		foreach ($documents as [$name, $bytes]) {
@@ -129,11 +136,13 @@ class SqlPlatformTest extends TestCase {
 		$viewer = new DocumentAccess();
 		$viewer->setViewerId('biel');
 
-		$this->assertSame(3, $this->search('museu', $viewer)->getTotal(), 'all three formats found by body text');
-		// And by a word only the odt holds.
-		$this->assertSame(1, $this->search('classe', $viewer)->getTotal());
+		$this->assertSame(5, $this->search('museu', $viewer)->getTotal(), 'all five formats found by body text');
+		// And by a word only the odt and the xls hold.
+		$this->assertSame(2, $this->search('classe', $viewer)->getTotal());
 		// And one only the ppt holds.
 		$this->assertSame(1, $this->search('pagament', $viewer)->getTotal());
+		// And one only the doc holds.
+		$this->assertSame(1, $this->search('pressupost', $viewer)->getTotal());
 	}
 
 	public function testADocumentWithoutTokensIsRefused(): void {

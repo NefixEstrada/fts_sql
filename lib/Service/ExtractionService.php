@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace OCA\FtsSql\Service;
 
+use OCA\FtsSql\Extraction\DocExtractor;
 use OCA\FtsSql\Extraction\ExtractionCause;
 use OCA\FtsSql\Extraction\ExtractionResult;
 use OCA\FtsSql\Extraction\IExtractor;
@@ -18,6 +19,7 @@ use OCA\FtsSql\Extraction\OoxmlExtractor;
 use OCA\FtsSql\Extraction\PdfExtractor;
 use OCA\FtsSql\Extraction\PptExtractor;
 use OCA\FtsSql\Extraction\TextSink;
+use OCA\FtsSql\Extraction\XlsExtractor;
 
 /**
  * Bytes to a plain-text ExtractionResult within the content budget. The
@@ -33,12 +35,11 @@ use OCA\FtsSql\Extraction\TextSink;
  */
 final class ExtractionService {
 	/**
-	 * The formats later milestones own (the legacy binary Office
-	 * formats still ahead) plus archives, executables, images and
-	 * media: never plain text, not extracted yet.
+	 * The formats no milestone owns any more, plus archives,
+	 * executables, images and media: never plain text, not extracted.
 	 */
 	public const NOT_EXTRACTED_EXTENSIONS = [
-		'doc', 'xls', 'epub',
+		'epub',
 		'zip', 'gz', 'tar',
 		'exe', 'bin',
 		'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic',
@@ -145,6 +146,8 @@ final class ExtractionService {
 			new OdfExtractor(),
 			new PdfExtractor(),
 			new PptExtractor(),
+			new XlsExtractor(),
+			new DocExtractor(),
 		];
 	}
 }
