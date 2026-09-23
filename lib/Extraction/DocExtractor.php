@@ -21,15 +21,19 @@ use Throwable;
 /**
  * Word 97-2003 (.doc): the PhpWord reader of DESIGN.md's Milestone 4,
  * behind the compound-file gate the .ppt and .xls extractors built.
- * Two facts of that reader shape this class. It ignores the FIB's
+ * Three facts of that reader shape this class. It ignores the FIB's
  * fEncrypted flag entirely — an encrypted document would be parsed as
  * the XOR-noise it is, so the gate reads the flag itself and answers
- * with the Encrypted cause. And it treats the paragraph table's FCs as
+ * with the Encrypted cause. It treats the paragraph table's FCs as
  * byte offsets into the WordDocument stream, which is what a simple
  * document is and what a piece-table document is not: the design's
  * documented caveat, ".doc piece table is missing from PhpWord" — such
  * a file costs itself, with the parser-gave-up cause and whatever the
- * reader recovered first.
+ * reader recovered first. And it spills every inline image to a
+ * tempnam() pair it never unlinks — the sweep in the finally deletes
+ * what this reader created (both the payload file and the empty
+ * tempnam base), and nothing else, so a concurrent worker's spool
+ * survives.
  */
 final class DocExtractor implements IExtractor {
 	public const TIME_CAP = 10.0;
@@ -37,6 +41,17 @@ final class DocExtractor implements IExtractor {
 	private const SIZE_CAP = 33554432;
 	private const WORD_MAGIC = 0xA5EC;
 	private const FLAG_ENCRYPTED = 1 << 7;
+	private const VENDOR_SPOOL_PREFIX = 'PHPWord_MsDoc';
+
+	/**
+	 * The reader the extractor runs, injectable only so a test can
+	 * stand in for it and reproduce the vendored spool the finally's
+	 * sweep exists to delete.
+	 */
+	public function __construct(
+		private readonly ?MsDoc $reader = null,
+	) {
+	}
 
 	public function owns(): array {
 		return ['doc'];
@@ -49,6 +64,11 @@ final class DocExtractor implements IExtractor {
 		if ($path === false) {
 			return new ExtractionResult(null, ExtractionCause::ParserGaveUp, 'no temporary file could be created for the reader');
 		}
+
+		// empty until the snapshot just before the reader runs: an
+		// abort in the gates below must not leave the finally's sweep
+		// reading a variable that was never set
+		$spoolBefore = [];
 
 		try {
 			$size = $this->spill($stream, $path);
@@ -80,7 +100,8 @@ final class DocExtractor implements IExtractor {
 				);
 			}
 
-			$document = (new MsDoc())->load($path);
+			$spoolBefore = self::vendorSpool();
+			$document = ($this->reader ?? new MsDoc())->load($path);
 
 			$deadline = microtime(true) + self::TIME_CAP;
 			foreach ($document->getSections() as $section) {
@@ -114,6 +135,9 @@ final class DocExtractor implements IExtractor {
 				'the reader gave up on the document: ' . $e->getMessage() . self::recoveredNote($sink),
 			);
 		} finally {
+			foreach (array_diff(self::vendorSpool(), $spoolBefore) as $spilled) {
+				@unlink($spilled);
+			}
 			@unlink($path);
 		}
 	}
@@ -174,6 +198,17 @@ final class DocExtractor implements IExtractor {
 			fclose($out);
 		}
 		return $total;
+	}
+
+	/**
+	 * The spool files the vendored reader may have left behind, by the
+	 * prefix its tempnam() calls carry.
+	 *
+	 * @return list<string>
+	 */
+	private static function vendorSpool(): array {
+		$files = glob(sys_get_temp_dir() . '/' . self::VENDOR_SPOOL_PREFIX . '*');
+		return $files === false ? [] : $files;
 	}
 
 	private static function recoveredNote(TextSink $sink): string {

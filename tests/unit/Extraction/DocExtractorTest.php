@@ -13,6 +13,8 @@ namespace OCA\FtsSql\Tests\Unit\Extraction;
 use OCA\FtsSql\Extraction\DocExtractor;
 use OCA\FtsSql\Extraction\ExtractionCause;
 use OCA\FtsSql\Tests\Fixtures;
+use OCA\FtsSql\Vendor\PhpOffice\PhpWord\PhpWord;
+use OCA\FtsSql\Vendor\PhpOffice\PhpWord\Reader\MsDoc;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -124,6 +126,43 @@ class DocExtractorTest extends TestCase {
 
 		$this->assertNull($result->cause);
 		$this->assertSame("museu\n", $result->text);
+	}
+
+	public function testTheVendorImageSpoolIsSweptAfterExtraction(): void {
+		// a file predating the extraction stands in for a concurrent
+		// worker's spool: the sweep must leave it alone
+		$foreign = tempnam(sys_get_temp_dir(), 'PHPWord_MsDoc');
+
+		$extractor = new DocExtractor(
+			new class() extends MsDoc {
+				// the stand-in reproduces the vendored behaviour the
+				// sweep exists for: every inline image is spilled to a
+				// tempnam pair the reader never unlinks
+				// (MsDoc.php:2195-2197)
+				public function load($filename) {
+					$base = tempnam(sys_get_temp_dir(), 'PHPWord_MsDoc');
+					file_put_contents($base . '.jpg', 'jpeg bytes');
+
+					$phpWord = new PhpWord();
+					$phpWord->addSection()->addText('sortida al museu');
+
+					return $phpWord;
+				}
+			},
+		);
+
+		ob_start();
+		try {
+			$result = $extractor->extract(Fixtures::stream(Fixtures::doc(['sortida al museu'])), 'doc', self::BUDGET);
+		} finally {
+			ob_end_clean();
+		}
+
+		$this->assertNull($result->cause);
+		$this->assertSame("sortida al museu\n", $result->text);
+		$this->assertSame([$foreign], glob(sys_get_temp_dir() . '/PHPWord_MsDoc*'));
+
+		@unlink($foreign);
 	}
 
 	/**
