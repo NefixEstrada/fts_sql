@@ -45,6 +45,12 @@ final class Sqlite implements IBackend {
 		return true;
 	}
 
+	public function textSearchConfigurations(): array {
+		// This engine takes no configuration — the tokeniser is the
+		// configuration — so the one name offered is the one that says so.
+		return ['simple'];
+	}
+
 	public function artefactStatements(): array {
 		return [
 			'CREATE VIRTUAL TABLE IF NOT EXISTS *PREFIX*fts_sql_fts USING fts5(title, content, content=\'*PREFIX*fts_sql_documents\', content_rowid=\'id\', tokenize="unicode61 remove_diacritics 2")',

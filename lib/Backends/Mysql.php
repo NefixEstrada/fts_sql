@@ -40,6 +40,12 @@ final class Mysql implements IBackend {
 		return true;
 	}
 
+	public function textSearchConfigurations(): array {
+		// This engine takes no configuration — the setting is inert here —
+		// so the one name offered is the one that says so.
+		return ['simple'];
+	}
+
 	public function artefactStatements(): array {
 		$statements = [];
 		if (!$this->catalogueHasColumn('title_norm')) {
@@ -48,8 +54,14 @@ final class Mysql implements IBackend {
 		if (!$this->catalogueHasColumn('content_norm')) {
 			$statements[] = 'ALTER TABLE *PREFIX*fts_sql_documents ADD COLUMN content_norm LONGTEXT';
 		}
-		if (!$this->catalogueHasIndex()) {
+		if (!$this->catalogueHasIndex('fts_sql_documents_fulltext')) {
 			$statements[] = 'ALTER TABLE *PREFIX*fts_sql_documents ADD FULLTEXT INDEX fts_sql_documents_fulltext (title_norm, content_norm)';
+		}
+		// A prefix index over the folded title serves the staleness probe
+		// (title_norm IS NULL): a FULLTEXT key cannot, and without this every
+		// render of the admin settings page would scan the widest table once.
+		if (!$this->catalogueHasIndex('fts_sql_documents_stale')) {
+			$statements[] = 'ALTER TABLE *PREFIX*fts_sql_documents ADD INDEX fts_sql_documents_stale (title_norm(8))';
 		}
 		return $statements;
 	}
@@ -111,20 +123,30 @@ final class Mysql implements IBackend {
 	}
 
 	/**
-	 * The *PREFIX* substitution yields the real table name, so the catalogue
-	 * comparison works without knowing the prefix.
+	 * The catalogue asks about this schema's table only. Two facts force the
+	 * shape: information_schema holds one row per column of every index, so a
+	 * COUNT over a composite index (the FULLTEXT key names two columns) is 2
+	 * and an exactly-one comparison would never hold — and a shared server
+	 * hosts same-prefixed Nextclouds in other schemas, which an unqualified
+	 * TABLE_NAME would happily count in. EXISTS with TABLE_SCHEMA = DATABASE()
+	 * answers the question both facts ask. The *PREFIX* substitution yields
+	 * the real table name, so the comparison works without knowing the prefix.
 	 */
 	private function catalogueHasColumn(string $column): bool {
 		$result = $this->db->executeQuery(
-			"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_NAME = '*PREFIX*fts_sql_documents' AND COLUMN_NAME = '" . $column . "'",
+			'SELECT EXISTS (SELECT 1 FROM information_schema.COLUMNS'
+			. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+			. " AND COLUMN_NAME = '" . $column . "')",
 		);
-		return in_array($result->fetchOne(), [1, '1', true], true);
+		return in_array($result->fetchOne(), [true, 1, '1'], true);
 	}
 
-	private function catalogueHasIndex(): bool {
+	private function catalogueHasIndex(string $index): bool {
 		$result = $this->db->executeQuery(
-			"SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_NAME = '*PREFIX*fts_sql_documents' AND INDEX_NAME = 'fts_sql_documents_fulltext'",
+			'SELECT EXISTS (SELECT 1 FROM information_schema.STATISTICS'
+			. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+			. " AND INDEX_NAME = '" . $index . "')",
 		);
-		return in_array($result->fetchOne(), [1, '1', true], true);
+		return in_array($result->fetchOne(), [true, 1, '1'], true);
 	}
 }

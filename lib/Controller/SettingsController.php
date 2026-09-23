@@ -11,22 +11,22 @@ declare(strict_types=1);
 namespace OCA\FtsSql\Controller;
 
 use OCA\FtsSql\AppInfo\Application;
-use OCA\FtsSql\ConfigLexicon;
 use OCA\FtsSql\Service\ConfigService;
-use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\DataResponse;
+use OCP\AppFramework\OCSController;
 use OCP\IRequest;
 
 /**
- * The two OCS-style settings endpoints, administrator-only by the framework's
- * default posture (no #[NoAdminRequired] on either). The closed language list
- * is enforced here because an arbitrary regconfig name would make every
- * PostgreSQL write fail; a non-positive content budget is refused the same
- * way.
+ * The two OCS settings endpoints, administrator-only by the framework's
+ * default posture (no #[NoAdminRequired] on either) — the administration
+ * scope of openapi.json. The language is validated against what the
+ * running engine itself accepts, because a name the engine lacks would
+ * make every PostgreSQL write fail; a non-positive content budget is
+ * refused the same way.
  */
-final class SettingsController extends Controller {
+final class SettingsController extends OCSController {
 	public function __construct(
 		IRequest $request,
 		private ConfigService $config,
@@ -34,9 +34,18 @@ final class SettingsController extends Controller {
 		parent::__construct(Application::APP_ID, $request);
 	}
 
-	#[FrontpageRoute(verb: 'PUT', url: '/settings/language')]
+	/**
+	 * Store the text search language every future index write will stem with
+	 *
+	 * @param string $language a text search configuration name, one of those the running engine itself reports
+	 * @return DataResponse<Http::STATUS_OK, array{language: string}, array{}>|DataResponse<Http::STATUS_UNPROCESSABLE_ENTITY, array{message: string}, array{}>
+	 *
+	 * 200: Language stored
+	 * 422: The running engine does not report this language
+	 */
+	#[ApiRoute(verb: 'PUT', url: '/settings/language')]
 	public function putLanguage(string $language): DataResponse {
-		if (!in_array($language, ConfigLexicon::availableLanguages(), true)) {
+		if (!in_array($language, $this->config->availableLanguages(), true)) {
 			return new DataResponse(
 				['message' => 'unknown text search language'],
 				Http::STATUS_UNPROCESSABLE_ENTITY,
@@ -46,7 +55,16 @@ final class SettingsController extends Controller {
 		return new DataResponse(['language' => $language]);
 	}
 
-	#[FrontpageRoute(verb: 'PUT', url: '/settings/content-bytes')]
+	/**
+	 * Store how many bytes of extracted text are indexed per document
+	 *
+	 * @param int $contentBytes the per-document content budget, in bytes
+	 * @return DataResponse<Http::STATUS_OK, array{contentBytes: int}, array{}>|DataResponse<Http::STATUS_UNPROCESSABLE_ENTITY, array{message: string}, array{}>
+	 *
+	 * 200: Budget stored
+	 * 422: The budget is not a positive number of bytes
+	 */
+	#[ApiRoute(verb: 'PUT', url: '/settings/content-bytes')]
 	public function putContentBytes(int $contentBytes): DataResponse {
 		if ($contentBytes <= 0) {
 			return new DataResponse(

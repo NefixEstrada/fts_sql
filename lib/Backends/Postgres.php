@@ -39,10 +39,33 @@ final class Postgres implements IBackend {
 		return true;
 	}
 
+	/**
+	 * pg_catalog only, never the whole catalogue: configurations created by
+	 * hand or by an extension live in other namespaces, and what is offered
+	 * is exactly what the server itself ships (DESIGN.md, Security).
+	 *
+	 * @return list<string>
+	 */
+	public function textSearchConfigurations(): array {
+		$result = $this->db->executeQuery(
+			'SELECT cfgname FROM pg_catalog.pg_ts_config'
+			. " WHERE cfgnamespace = 'pg_catalog'::regnamespace"
+			// simple first: it is the default, and the one configuration the
+			// bootstrap catalog itself ships rather than the initdb scripts.
+			. " ORDER BY (cfgname = 'simple') DESC, cfgname",
+		);
+		return array_map(static fn (mixed $cfg): string => (string)$cfg, $result->fetchFirstColumn());
+	}
+
 	public function artefactStatements(): array {
 		return [
 			'ALTER TABLE *PREFIX*fts_sql_documents ADD COLUMN IF NOT EXISTS content_tsv tsvector',
 			'CREATE INDEX IF NOT EXISTS fts_sql_documents_tsv ON *PREFIX*fts_sql_documents USING GIN (content_tsv) WITH (fastupdate = off)',
+			// A GIN index cannot serve `content_tsv IS NULL`, the staleness
+			// probe the admin settings page runs per render; this partial one
+			// holds only the stale rows, so the probe stays proportional to
+			// what is stale, never to the table.
+			'CREATE INDEX IF NOT EXISTS fts_sql_documents_unindexed ON *PREFIX*fts_sql_documents (id) WHERE content_tsv IS NULL',
 		];
 	}
 

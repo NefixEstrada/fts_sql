@@ -39,9 +39,11 @@
         }
     },
     "scripts": {
+        "lint": "find . -name \\*.php -not -path './vendor/*' -not -path './vendor-bin/*' -not -path './node_modules/*' -not -path './build/*' -not -path './lib/Vendor/*' -print0 | xargs -0 -n1 php -l",
         "cs:check": "php-cs-fixer fix --dry-run --diff",
         "cs:fix": "php-cs-fixer fix",
         "psalm": "psalm --no-cache",
+        "openapi": "generate-spec --verbose && npm run typescript:generate",
         "test:unit": "phpunit -c tests/phpunit.xml --testsuite unit",
         "test:integration": "phpunit -c tests/phpunit.xml --testsuite integration",
         "test:scoping": "@php tools/scope-selftest.php",

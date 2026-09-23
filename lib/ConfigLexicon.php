@@ -17,9 +17,11 @@ use OCP\Config\ValueType;
 
 /**
  * The two app config keys, their types and defaults (DESIGN.md,
- * "Configuration"). The closed language list lives here because three
- * places must agree on it: the lexicon default, the OCS endpoint that
- * refuses anything outside it, and the admin card's <select>.
+ * "Configuration"). The languages themselves are no static list: the offered
+ * set is what the running engine accepts, read live through
+ * ConfigService::availableLanguages(), and the lexicon holds only the
+ * default — `simple`, the one configuration every PostgreSQL ships in the
+ * bootstrap catalog.
  */
 final class ConfigLexicon implements ILexicon {
 	public const LANGUAGE = 'language';
@@ -28,13 +30,6 @@ final class ConfigLexicon implements ILexicon {
 	public const DEFAULT_LANGUAGE = 'simple';
 	/** 2 MiB of extracted plain text per document (one PDF page is ~2.8 KB). */
 	public const DEFAULT_CONTENT_BYTES = 2097152;
-
-	/**
-	 * @return list<string>
-	 */
-	public static function availableLanguages(): array {
-		return ['simple', 'catalan', 'spanish', 'english'];
-	}
 
 	public function getStrictness(): Strictness {
 		return Strictness::EXCEPTION;
@@ -46,7 +41,7 @@ final class ConfigLexicon implements ILexicon {
 				self::LANGUAGE,
 				ValueType::STRING,
 				self::DEFAULT_LANGUAGE,
-				'PostgreSQL text search configuration; simple disables stemming; other engines ignore it. Changing it invalidates every indexed document.',
+				'PostgreSQL text search configuration, one of those the running server itself ships in pg_catalog; simple disables stemming; other engines ignore it. Changing it invalidates every indexed document.',
 			),
 			new Entry(
 				self::CONTENT_BYTES,

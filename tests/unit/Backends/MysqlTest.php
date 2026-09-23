@@ -40,6 +40,11 @@ class MysqlTest extends TestCase {
 		$this->assertTrue($this->backend->isUsable());
 	}
 
+	public function testTextSearchConfigurationsOfferOnlySimple(): void {
+		// The setting is inert on this engine: one name, and it says so.
+		$this->assertSame(['simple'], $this->backend->textSearchConfigurations());
+	}
+
 	public function testNormaliseTextFoldsAccentsAndLowercases(): void {
 		// The _norm columns hold this form: an InnoDB FULLTEXT index over
 		// utf8mb4_bin folds neither accents nor case on the query side.
@@ -58,7 +63,7 @@ class MysqlTest extends TestCase {
 
 	public function testArtefactStatementsAsksTheCatalogueAndStaysQuietOverAnExistingArtefact(): void {
 		$asked = [];
-		$this->db->expects($this->exactly(3))
+		$this->db->expects($this->exactly(4))
 			->method('executeQuery')
 			->willReturnCallback(function (string $sql) use (&$asked): IResult {
 				$asked[] = $sql;
@@ -67,9 +72,18 @@ class MysqlTest extends TestCase {
 
 		$this->assertSame([], $this->backend->artefactStatements());
 		$this->assertSame([
-			"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_NAME = '*PREFIX*fts_sql_documents' AND COLUMN_NAME = 'title_norm'",
-			"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_NAME = '*PREFIX*fts_sql_documents' AND COLUMN_NAME = 'content_norm'",
-			"SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_NAME = '*PREFIX*fts_sql_documents' AND INDEX_NAME = 'fts_sql_documents_fulltext'",
+			'SELECT EXISTS (SELECT 1 FROM information_schema.COLUMNS'
+				. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+				. " AND COLUMN_NAME = 'title_norm')",
+			'SELECT EXISTS (SELECT 1 FROM information_schema.COLUMNS'
+				. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+				. " AND COLUMN_NAME = 'content_norm')",
+			'SELECT EXISTS (SELECT 1 FROM information_schema.STATISTICS'
+				. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+				. " AND INDEX_NAME = 'fts_sql_documents_fulltext')",
+			'SELECT EXISTS (SELECT 1 FROM information_schema.STATISTICS'
+				. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+				. " AND INDEX_NAME = 'fts_sql_documents_stale')",
 		], $asked);
 	}
 
@@ -80,14 +94,24 @@ class MysqlTest extends TestCase {
 			'ALTER TABLE *PREFIX*fts_sql_documents ADD COLUMN title_norm LONGTEXT',
 			'ALTER TABLE *PREFIX*fts_sql_documents ADD COLUMN content_norm LONGTEXT',
 			'ALTER TABLE *PREFIX*fts_sql_documents ADD FULLTEXT INDEX fts_sql_documents_fulltext (title_norm, content_norm)',
+			'ALTER TABLE *PREFIX*fts_sql_documents ADD INDEX fts_sql_documents_stale (title_norm(8))',
 		], $this->backend->artefactStatements());
 	}
 
 	public function testArtefactStatementsEmitsOnlyWhatTheCatalogueSaysIsMissing(): void {
 		$catalogue = [
-			"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_NAME = '*PREFIX*fts_sql_documents' AND COLUMN_NAME = 'title_norm'" => 1,
-			"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_NAME = '*PREFIX*fts_sql_documents' AND COLUMN_NAME = 'content_norm'" => 0,
-			"SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_NAME = '*PREFIX*fts_sql_documents' AND INDEX_NAME = 'fts_sql_documents_fulltext'" => 0,
+			'SELECT EXISTS (SELECT 1 FROM information_schema.COLUMNS'
+				. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+				. " AND COLUMN_NAME = 'title_norm')" => 1,
+			'SELECT EXISTS (SELECT 1 FROM information_schema.COLUMNS'
+				. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+				. " AND COLUMN_NAME = 'content_norm')" => 0,
+			'SELECT EXISTS (SELECT 1 FROM information_schema.STATISTICS'
+				. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+				. " AND INDEX_NAME = 'fts_sql_documents_fulltext')" => 1,
+			'SELECT EXISTS (SELECT 1 FROM information_schema.STATISTICS'
+				. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '*PREFIX*fts_sql_documents'"
+				. " AND INDEX_NAME = 'fts_sql_documents_stale')" => 1,
 		];
 		$this->db->method('executeQuery')->willReturnCallback(
 			fn (string $sql): IResult => $this->resultGiving($catalogue[$sql] ?? 0),
@@ -95,7 +119,6 @@ class MysqlTest extends TestCase {
 
 		$this->assertSame([
 			'ALTER TABLE *PREFIX*fts_sql_documents ADD COLUMN content_norm LONGTEXT',
-			'ALTER TABLE *PREFIX*fts_sql_documents ADD FULLTEXT INDEX fts_sql_documents_fulltext (title_norm, content_norm)',
 		], $this->backend->artefactStatements());
 	}
 

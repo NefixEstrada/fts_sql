@@ -36,6 +36,11 @@ class SqliteTest extends TestCase {
 		$this->assertSame('sqlite', $this->backend->name());
 	}
 
+	public function testTextSearchConfigurationsOfferOnlySimple(): void {
+		// The tokeniser is the configuration here: one name, and it says so.
+		$this->assertSame(['simple'], $this->backend->textSearchConfigurations());
+	}
+
 	public function testIsUsableProbesFts5ThroughTheConnection(): void {
 		$asked = [];
 		$this->db->expects($this->exactly(2))

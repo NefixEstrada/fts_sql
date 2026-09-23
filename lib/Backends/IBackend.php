@@ -15,14 +15,17 @@ use OCA\FtsSql\Model\SearchQuery;
 
 /**
  * The engine strategy, one class per value of IDBConnection::getDatabaseProvider()
- * (DESIGN.md, "The engine strategy"). Each strategy owns exactly six things:
- * the capability probe, the artefact DDL, "are there rows the artefact cannot
- * find", the write expression, PHP-side normalisation, and match compilation.
+ * (DESIGN.md, "The engine strategy"). Each strategy owns exactly seven
+ * things: the capability probe, the artefact DDL, "are there rows the
+ * artefact cannot find", the write expression, PHP-side normalisation,
+ * match compilation, and the text search configurations the engine itself
+ * accepts.
  *
- * All but two of those return strings and execute nothing; the two named
- * exceptions that read the engine are the capability probe (SQLite: is FTS5
- * compiled in) and MySQL's catalogue check before its non-idempotent
- * ADD FULLTEXT INDEX. Everything else a strategy wants to know, it is told.
+ * Most of those return strings and execute nothing; the ones that read the
+ * engine are the capability probe (SQLite: is FTS5 compiled in), MySQL's
+ * catalogue checks before its non-idempotent DDL, the staleness probes,
+ * and the live list of text search configurations. Everything else a
+ * strategy wants to know, it is told.
  *
  * Raw SQL uses the *PREFIX* placeholder: IDBConnection::executeQuery and
  * executeStatement substitute the configured table prefix before the engine
@@ -40,6 +43,21 @@ interface IBackend {
 	 * FTS5 compiled in cannot, and answers false.
 	 */
 	public function isUsable(): bool;
+
+	/**
+	 * The text search configuration names this engine itself accepts as :cfg,
+	 * read live from its own catalogue: PostgreSQL answers what
+	 * pg_catalog.pg_ts_config ships — a set that grows with the engine
+	 * (measured on live servers: 16 names on PostgreSQL 9.6–11, catalan only
+	 * since 14, 30 on 18) — while the other engines take no configuration
+	 * and answer simple only. This is the whole offered list: the card's
+	 * <select>, the OCS endpoint and the read guard agree on it, so it can
+	 * neither offer a name the engine below lacks nor lag behind a newer
+	 * engine.
+	 *
+	 * @return list<string>
+	 */
+	public function textSearchConfigurations(): array;
 
 	/**
 	 * The search artefact's DDL, idempotent: install repair steps run on

@@ -61,7 +61,23 @@ class PostgresTest extends TestCase {
 		$this->assertSame([
 			'ALTER TABLE *PREFIX*fts_sql_documents ADD COLUMN IF NOT EXISTS content_tsv tsvector',
 			'CREATE INDEX IF NOT EXISTS fts_sql_documents_tsv ON *PREFIX*fts_sql_documents USING GIN (content_tsv) WITH (fastupdate = off)',
+			'CREATE INDEX IF NOT EXISTS fts_sql_documents_unindexed ON *PREFIX*fts_sql_documents (id) WHERE content_tsv IS NULL',
 		], $this->backend->artefactStatements());
+	}
+
+	public function testTextSearchConfigurationsReadTheServersOwnCatalogue(): void {
+		// What the engine itself reports, in the order the query asks for:
+		// simple first, then alphabetical.
+		$this->db->expects($this->once())
+			->method('executeQuery')
+			->with(
+				'SELECT cfgname FROM pg_catalog.pg_ts_config'
+				. " WHERE cfgnamespace = 'pg_catalog'::regnamespace"
+				. " ORDER BY (cfgname = 'simple') DESC, cfgname",
+			)
+			->willReturn($this->resultWithColumn(['simple', 'arabic', 'catalan']));
+
+		$this->assertSame(['simple', 'arabic', 'catalan'], $this->backend->textSearchConfigurations());
 	}
 
 	#[DataProvider('providesExistsValues')]
@@ -144,6 +160,12 @@ class PostgresTest extends TestCase {
 	private function resultGiving(mixed $fetchOne): IResult&MockObject {
 		$result = $this->createMock(IResult::class);
 		$result->method('fetchOne')->willReturn($fetchOne);
+		return $result;
+	}
+
+	private function resultWithColumn(array $column): IResult&MockObject {
+		$result = $this->createMock(IResult::class);
+		$result->method('fetchFirstColumn')->willReturn($column);
 		return $result;
 	}
 
