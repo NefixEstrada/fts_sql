@@ -88,4 +88,12 @@ class PdfFiltersTest extends TestCase {
 	public function testAnUnmarkedRowPassesThrough(): void {
 		$this->assertSame('ABCD', PdfFilters::pngPredictor("\x00ABCD", 1, 8, 4));
 	}
+
+	public function testDecodeParmsLyingAboutTheRowLengthAnswerNothing(): void {
+		// /DecodeParms integers are attacker bytes: a Columns in the
+		// gigabytes cannot hold a single complete row in the data, and
+		// the answer must cost nothing — not a str_repeat of the lie
+		$this->assertSame('', PdfFilters::pngPredictor("\x00AB", 1, 8, 0x7FFFFFFF));
+		$this->assertSame('', PdfFilters::pngPredictor("\x00AB", 65536, 8, 65536));
+	}
 }

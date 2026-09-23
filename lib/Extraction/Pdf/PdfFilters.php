@@ -149,13 +149,20 @@ final class PdfFilters {
 	public static function pngPredictor(string $data, int $colors, int $bpc, int $columns): string {
 		$bpp = max(1, (int)(($colors * $bpc) / 8));
 		$rowLength = (int)ceil($colors * $bpc * $columns / 8);
+		$len = strlen($data);
 		if ($rowLength < 1) {
 			return $data;
+		}
+		// A row consumes 1 + rowLength bytes of stream, so rows longer
+		// than the data hold nothing — and a /DecodeParms lie (the
+		// three integers are attacker bytes) must be answered before
+		// the zero row below repeats itself into a gigabyte allocation.
+		if ($rowLength > $len) {
+			return '';
 		}
 
 		$out = '';
 		$previous = str_repeat("\0", $rowLength);
-		$len = strlen($data);
 		$at = 0;
 		while ($at + 1 + $rowLength <= $len) {
 			$type = ord($data[$at]);
