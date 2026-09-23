@@ -6,206 +6,125 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 # FTS SQL
 
+[![REUSE status](https://api.reuse.software/badge/github.com/nefixestrada/fts_sql)](https://api.reuse.software/info/github.com/nefixestrada/fts_sql)
+[![tests](https://github.com/nefixestrada/fts_sql/actions/workflows/phpunit-sqlite.yml/badge.svg)](https://github.com/nefixestrada/fts_sql/actions/workflows/phpunit-sqlite.yml)
+
 A full text search platform for the [`fulltextsearch`][fts] framework that
 indexes into the database the Nextcloud instance already runs — PostgreSQL,
 MySQL/MariaDB or SQLite — so nobody has to operate Elasticsearch to get full
-text search. The design lives in [`DESIGN.md`](DESIGN.md); read it first.
+text search.
 
 [fts]: https://github.com/nextcloud/fulltextsearch
+
+## Screenshots
+
+Content search in the unified search — the extracted text is what matches,
+not just file names (the demo account's seven `museu` documents):
+
+![Search results for museu](img/screenshot-search-results.png)
+
+The admin card, in the framework's own Full text search settings section:
+
+![Admin settings card](img/screenshot-admin-settings.png)
 
 ## Supported formats
 
 | Format | What is indexed |
 | --- | --- |
 | Plain text — `.txt`, `.md`, `.csv`, `.log` and every extension nobody declared otherwise | the content as-is |
-| OOXML — `.docx`, `.xlsx`, `.pptx` | body text, extracted by the app's own `XMLReader` passes over the container |
-| ODF — `.odt`, `.ods`, `.odp` | body text, one pass over `content.xml` |
-| PDF — `.pdf` | body text, page by page until the budget, by the app's own extractor (below) |
-| Everything else — legacy `.doc`/`.xls`/`.ppt`, `.epub`, archives, executables, images, audio and video | title, access and tags only, with the reason recorded on the document |
+| Documents — OOXML, ODF, PDF and legacy Office (`.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods`, `.odp`, `.pdf`, `.doc`, `.xls`, `.ppt`) | the body text |
+| Everything else — `.epub`, archives, executables, images, audio and video | title, access and tags only |
 
-Extraction is pure PHP over streams — no Elasticsearch, no Tika, no
-external binary, and, so far, no bundled library: the PDF too is read by
-the app's own code. An encrypted document is reported as such — except
-the one class every reader opens silently, the standard security
-handler with an empty user password (RC4 and AES-128), which is
-decrypted; AES-256 revisions and real passwords stay encrypted. A
-document whose text was cut at the content budget is indexed on what
-survived and flagged; a document the parser gave up on is indexed on
-what was recovered, with the cause; a PDF page that fails costs that
-page, never the run. The legacy binary Office formats arrive in
-Milestone 4.
+## Requirements
 
-The PDF is the route DESIGN.md's own measurement picked: `smalot/pdfparser`
-materialises every object of its 21 MiB reference file into 697.5 MiB of
-PHP memory — a fatal at Nextcloud's 512 MB floor before any text — and
-crashes on that file besides, so `lib/Extraction/Pdf/` reads the
-cross-reference index (classic tables, PDF 1.5 streams with object
-streams, hybrid files, and a bounded scan when the chain is broken) and
-then, per page, only what the page names: its content streams under a
-capped inflate, its fonts' encodings and ToUnicode CMaps, its form
-XObjects. The whole file sits under the 512 MB floor at a ~70 MiB peak.
+- Nextcloud 34 with PHP 8.2 — the floors the integration matrix
+  measures; the manifest pins the majors the app has been tested on.
+- One of PostgreSQL 14+, MySQL/MariaDB, or SQLite built with the FTS5
+  extension (the standard distributions' builds carry it; the app probes
+  and says so when it is missing).
+- The [`fulltextsearch`][fts] framework app and its `files_fulltextsearch`
+  files provider.
 
-## Tooling
+## Installation
 
-Dependencies live in the Nix flake; work inside it:
+1. Install **fulltextsearch**, **files_fulltextsearch** and **FTS SQL**
+   (app id `fts_sql`) from the Nextcloud app store, or with occ:
 
-```console
-$ nix develop
-$ composer install          # PHPUnit, Psalm, php-cs-fixer, nextcloud/ocp
-$ vendor/bin/phpunit -c tests/phpunit.xml --testsuite unit
-$ vendor/bin/psalm --no-cache
-$ vendor/bin/php-cs-fixer fix --dry-run --diff
-```
+   ```console
+   $ occ app:install fulltextsearch
+   $ occ app:install files_fulltextsearch
+   $ occ app:install fts_sql
+   ```
 
-The shell ships PHP 8.2 — the manifest floor — with `intl` deliberately
-removed (nothing may depend on it) and SQLite with FTS5 for experiments.
+   Enabling FTS SQL runs its migrations and creates the per-engine search
+   artefacts.
+2. Select FTS SQL as the search platform — on the admin card above
+   (Administration → Full text search), or:
 
-## Bundled dependencies
+   ```console
+   $ occ config:app:set fulltextsearch search_platform \
+       --value 'OCA\FtsSql\Platform\SqlPlatform'
+   ```
 
-The Milestone 3 tooling (DESIGN.md), in place before the first runtime
-library arrives: every runtime Composer dependency — `require` minus php
-and the extensions — is rewritten under the app's own namespace
-(`OCA\FtsSql\Vendor\…`) with [php-scoper][scoper], the pattern
-`fulltextsearch_elasticsearch` already uses, and laid out in `lib/Vendor`
-with namespace-shaped paths, where Nextcloud's own autoloader
-(`OCA\FtsSql\` → `lib/`) serves it. No Composer autoloader loads at
-runtime, and the unscoped originals are pruned from `vendor/`, so a
-reference to an unprefixed namespace fails in development — where it is
-seen — rather than shipping dead to production.
+3. Fill the index and try it:
 
-The pipeline (`tools/scope-vendor.php`) runs after every
-`composer install` and `update`, so development and release see the same
-code shape. With no runtime dependencies — today — it is a no-op that
-needs neither php-scoper nor the network. Finders and pruning derive
-from what composer.json actually requires, never a hand-kept list; a
-package that is not pure PSR-4 fails the build loudly (it would ship but
-never load); and php-scoper lives in its own composer bin
-(`vendor-bin/php-scoper`, through the bin plugin) so it never mixes with
-the app's dependencies.
+   ```console
+   $ occ fulltextsearch:index -r
+   $ occ fulltextsearch:test   # the framework's own smoke test
+   ```
 
-Its proof needs no runtime dependency either:
+After changing the `language` setting or a failed run, the remedy is
+always `occ fulltextsearch:reset` (it asks for confirmation) followed by
+another index run.
 
-```console
-$ composer run test:scoping
-```
+Removing the app leaves its data — including a plaintext copy of every
+indexed document — in place; [docs/admin.md](docs/admin.md) covers the
+clean removal and what an upgrade of the Nextcloud server touches.
 
-builds a scratch composer project with a path-repository fixture — no
-network — scopes it with the real prefix, and checks that the class
-exists under `OCA\FtsSql\Vendor`, autoloads out of `lib/Vendor`, and
-that the unprefixed original is gone; a fixture with a `files` autoload
-must be refused. CI runs it on the static job. `make appstore` stages
-composer.json, the tools and php-scoper into the build directory and
-runs the pipeline there, so the tarball never depends on the state of
-the working tree's `vendor/`; krankerl's `before_cmds` run
-`composer install --no-dev` in the checkout for the same reason.
+## Documentation
 
-[scoper]: https://github.com/Humbug/php-scoper
+- [DESIGN.md](DESIGN.md) — the architecture and the decisions behind it,
+  with the measurements that picked them.
+- [docs/admin.md](docs/admin.md) — uninstalling cleanly, upgrading
+  Nextcloud.
+- [docs/development.md](docs/development.md) — the toolchain and the
+  development instance.
+- [docs/testing.md](docs/testing.md) — the test suites and the local
+  engine matrix.
+- [docs/ci.md](docs/ci.md) — the CI workflow set and its automation.
+- [docs/vendoring.md](docs/vendoring.md) — the php-scoper bundling
+  pipeline.
+- [docs/benchmark.md](docs/benchmark.md) — the benchmark stages and
+  today's numbers.
+- [docs/releasing.md](docs/releasing.md) — building and signing the
+  release tarball.
+- [docs/translations.md](docs/translations.md) — the translation flow.
 
-## Development instance
+## Support
 
-The instance runs on [nextcloud-docker-dev][docker-dev] (checkout outside
-this repository), one Nextcloud 34 on PostgreSQL 16, with this repository
-bind-mounted as `apps-extra/fts_sql`:
+- [Bug reports and feature requests](https://github.com/nefixestrada/fts_sql/issues)
+- [Questions and usage help](https://github.com/nefixestrada/fts_sql/discussions)
 
-```console
-$ cd /path/to/nextcloud-docker-dev
-$ docker compose up -d stable34
-$ ./scripts/occ.sh stable34 -- app:enable fts_sql     # runs pending migrations + the artefact repair step
-$ ./scripts/occ.sh stable34 -- db:schema:export       # inspect the tables
-```
+## Maintainers
 
-Select the platform for the framework and run it end to end:
+- [Néfix Estrada](https://github.com/NefixEstrada) — see
+  [AUTHORS.md](AUTHORS.md)
 
-```console
-$ ./scripts/occ.sh stable34 -- config:app:set fulltextsearch search_platform \
-    --value 'OCA\FtsSql\Platform\SqlPlatform'
-$ ./scripts/occ.sh stable34 -- fulltextsearch:index -r
-$ ./scripts/occ.sh stable34 -- fulltextsearch:search <user> <needle>
-$ ./scripts/occ.sh stable34 -- fulltextsearch:test   # the framework's own smoke test
-```
+## Made with AI
 
-After changing the `language` setting or a failed run, the remedy is always
-`fulltextsearch:reset` (it asks for confirmation) followed by another index.
+The design, code, tests and documentation in this repository were
+written with an AI coding agent, directed and reviewed by the
+maintainer.
 
-`fulltextsearch` and `files_fulltextsearch` (stable34 branches) sit next to it
-in `apps-extra/`. The engine-specific overlay — PostgreSQL 16 instead of
-`postgres:latest`, the bind mount — lives in the untracked
-`docker-compose.override.yml`.
+## Development
 
-Run the whole suite, integration included, inside the container:
+Work happens inside the Nix flake against a nextcloud-docker-dev
+instance: [docs/development.md](docs/development.md) sets it up,
+[docs/testing.md](docs/testing.md) runs every suite, and
+[docs/ci.md](docs/ci.md) explains what CI checks. Contributions are
+welcome — commit subjects read `type: sentence`, and measurements beat
+adjectives.
 
-```console
-$ docker exec -u www-data -w /var/www/html/apps-extra/fts_sql \
-    master-stable34-1 phpunit -c tests/phpunit.xml
-```
+## License
 
-A suite run costs the instance its files: the server's
-`Test\TestCase::tearDownAfterClass()` wipes `oc_storages` and
-`oc_filecache` after every test class and then deletes the data
-directory's "stray" files — the ones the emptied cache no longer knows.
-So it is not only a container recreation that loses the test files; every
-integration run does. The remedy is the same: recreate them under
-`data/<user>/files/`, `occ files:scan --quiet <user>`, reset the index and
-reindex. A search that comes back empty right after a suite is the
-platform tables emptied by a tearDown while the framework's book still
-marks everything indexed — `occ fulltextsearch:reset`, then index again.
-
-The web frontend answers at `http://stable34.local` (add it to `/etc/hosts`,
-or curl with `-H 'Host: stable34.local'` against the proxy port). The
-MariaDB, MySQL and SQLite legs of the integration matrix are not set up
-locally (disk); they run in CI —
-[`.github/workflows/tests.yml`](.github/workflows/tests.yml) installs a real
-Nextcloud against all four engines from the official `continuous-integration-*`
-images and runs both suites on each.
-
-## Benchmark
-
-The quality stage (DESIGN.md, "Background") indexes the fixed corpus —
-5,000 Wikipedia opening paragraphs, a third each in Catalan, Spanish and
-English, under `benchmark/corpus/` — through the platform's own interface
-and scores query sets whose answers are known by construction: a
-distinctive word of a document's title has to find that document in the
-top ten, and a word the corpus does not hold has to find nothing.
-
-```console
-$ docker exec -u www-data <nextcloud-container> \
-    php /var/www/html/apps-extra/fts_sql/benchmark/quality.php
-```
-
-It runs against whatever engine that instance uses, cleans up after
-itself (everything is indexed under the `benchmark` provider and
-removed), and ends with one JSON line — keep it under
-`benchmark/results/` to compare a later change against today's
-measurement (PostgreSQL 16: precision@10 0.9524, index 33 s).
-
-The extraction stage measures the extractors on the same footing: the
-same corpus, packed at run time into containers shaped like the real
-applications write them, extracted through `ExtractionService` — no
-database involved, so it also runs in `nix develop`:
-
-```console
-$ docker exec -u www-data <nextcloud-container> \
-    php /var/www/html/apps-extra/fts_sql/benchmark/extraction.php
-```
-
-One batch scenario (a full corpus of corpus-sized documents — the shape
-of a real indexing run) and one file per extractor and per boundary:
-within the budget, over it (the sink fills and the walk stops early),
-and past the entry read cap (the refusal boundary, documented rather
-than hidden). The PDF adds its own scenarios — a many-page compressed
-document, the same shape encrypted under an empty user password, and
-the 756-page ISO 32000-1 the route decision measured, when its path is
-passed (`--pdf=…`; the file is not in the repository). Peaks are
-marginal, measured under the 512 MB ceiling Nextcloud documents.
-Today's numbers: 0.9 ms per document in the batch, a 1 MiB-text docx
-complete at +6 MiB peak, the over-budget docx cut at the budget with
-+14.7 MiB, and the ISO at a ~70 MiB peak where the library route cost
-704.3 MiB and a fatal — the memory claim, decided. On speed the host
-decides which designed bound stops the walk: the dev shell reaches the
-full 2 MiB budget cut in ~7 s, the slower container PHP meets the 10 s
-wall-clock first with ~577 KiB extracted — either way the document is
-findable by what survived, with the cause recorded
-(`benchmark/results/2026-09-16-pdf.json` keeps both sides and both
-hosts).
-
-[docker-dev]: https://github.com/nextcloud/nextcloud-docker-dev
+AGPL-3.0-or-later — see [LICENSES/](LICENSES).

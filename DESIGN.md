@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 - **Author**: Néfix Estrada (<nefixestrada@gmail.com>)
 - **Created**: 2026-09-15
-- **Status**: Draft
+- **Status**: Implemented — milestones 1–4 complete, benchmarked and integration-tested on all four engines; the open-issues section below is closed with its resolutions registered
 - **Approvals**: none yet
 
 ## Objective
@@ -164,7 +164,7 @@ The diagram's boxes map onto classes one to one. The rule that decides where a c
 
 ```text
 lib/
-  AppInfo/Application.php           registers nothing: a platform is declared in info.xml
+  AppInfo/Application.php           registers the one listener the streaming fast path needs; a platform is declared in info.xml
   ConfigLexicon.php                 the two config keys, their types and defaults
   Platform/SqlPlatform.php          implements IFullTextSearchPlatform; thin, one hand-off per method
 
@@ -286,6 +286,8 @@ One class per value of `IDBConnection::getDatabaseProvider()`, selected once per
 interface IBackend {
 	public function name(): string;
 	public function isUsable(): bool;
+	/** the :cfg names this engine itself accepts, read live from its catalogue; simple only where none applies */
+	public function textSearchConfigurations(): array;
 	/** @return list<string> DDL, idempotent */
 	public function artefactStatements(): array;
 	public function hasUnindexedDocuments(): bool;
@@ -306,14 +308,15 @@ final readonly class CompiledMatch {
 }
 ```
 
-Each strategy owns exactly six things and nothing else; all but two return strings and execute nothing:
+Each strategy owns exactly seven things and nothing else; most return strings and execute nothing:
 
 1. **A capability probe** — whether this engine can serve full text search here (SQLite: is FTS5 compiled in). Reads the engine.
-2. **The artefact DDL** — idempotent, because install repair steps run on every `occ app:enable`. Reads the catalogue on MySQL, whose `ADD FULLTEXT INDEX` has no `IF NOT EXISTS`.
-3. **"Are there rows the artefact cannot find"** — the state that creating an artefact over existing rows leaves behind. Deliberately not "is the artefact empty": an empty index over an empty table is a healthy fresh install.
-4. **The write expression** — the `SET` assignments that fill the artefact from `title` and `content`, with the language as a bound parameter; empty where the engine maintains the artefact itself.
-5. **PHP-side normalisation** — the folding the engine's tokeniser lacks, applied to what feeds the artefact and to the query, never to the stored text an excerpt is cut from.
-6. **Match compilation** — the predicate, the ranking expression, any join, and the bound parameters for one parsed query.
+2. **The text search configurations** — the names this engine itself accepts as `:cfg`, read live from its own catalogue: PostgreSQL answers `pg_catalog.pg_ts_config` (a set that grows with the engine — measured on live servers: 16 names on 9.6–11, `catalan` only since 14, `estonian` new in 18), the other engines take no configuration and answer `simple` only. Reads the engine.
+3. **The artefact DDL** — idempotent, because install repair steps run on every `occ app:enable`. Reads the catalogue on MySQL, whose `ADD FULLTEXT INDEX` has no `IF NOT EXISTS`.
+4. **"Are there rows the artefact cannot find"** — the state that creating an artefact over existing rows leaves behind. Deliberately not "is the artefact empty": an empty index over an empty table is a healthy fresh install.
+5. **The write expression** — the `SET` assignments that fill the artefact from `title` and `content`, with the language as a bound parameter; empty where the engine maintains the artefact itself.
+6. **PHP-side normalisation** — the folding the engine's tokeniser lacks, applied to what feeds the artefact and to the query, never to the stored text an excerpt is cut from.
+7. **Match compilation** — the predicate, the ranking expression, any join, and the bound parameters for one parsed query.
 
 | Engine | Artefact | Filled by | PHP normalisation |
 | --- | --- | --- | --- |
@@ -477,6 +480,7 @@ The framework's `ISearchRequest` is wider than any SQL platform can serve, and t
 | --- | --- | --- |
 | `getMetaTags()` | narrows | honoured, as a disjunction over tag rows of kind `meta` — `files_fulltextsearch` sends one tag per ticked source and a file has exactly one source, so a conjunction would match nothing |
 | `getLimitFields()` | narrows | honoured when it names both `title` and `content`; a proper subset refuses (MySQL answers `MATCH(title)` against the composite index with ERROR 1191) |
+| the unified search's Date chip (`options` `since`/`until`) | narrows | honoured as a range over the stored `modified`, on every engine — the one user-visible option, and left unserved it was a silent widening |
 | `getRegexFilters()`, `getWildcardFilters()`, `getSubTags()`, `getSimpleQueries()` | narrow | refuse, and say so: ignoring them would return documents the user excluded |
 | `getWildcardFields()`, `getParts()`, `getFields()` | widen | logged at `debug` and skipped; `files_fulltextsearch` sends the first two on every search, so refusing them would serve no query at all |
 
@@ -486,12 +490,12 @@ Two app config keys, declared through a config lexicon:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `language` | string, one of `simple`, `catalan`, `spanish`, `english` | `simple` | PostgreSQL text search configuration; `simple` disables stemming; other engines ignore it |
+| `language` | string, one of the text search configurations the running PostgreSQL itself reports in `pg_catalog.pg_ts_config` (read live; the set grows with the engine — 16 names on PostgreSQL 9.6–11, 30 on 18) | `simple` | PostgreSQL text search configuration; `simple` disables stemming; other engines ignore it |
 | `content_bytes` | int | `2097152` (2 MiB) | extracted plain text stored per document, in bytes |
 
 The budget is bytes of extracted text, not file size, which `files_fulltextsearch` gates upstream at 20 MB. For intuition: one page of PDF prose is about 2.8 KB of text, the corpus median is 915 bytes and its p99 4,556 bytes, and the entire 756-page ISO 32000-1 specification is 2.05 MB — so 2 MiB indexes roughly 760 pages per document. Nextcloud's Elasticsearch platform overrides Tika's 100,000-character limit to unlimited, which is why the budget is generous rather than conservative. The cut is `mb_strcut()` (byte-denominated, sequence-safe — `substr()` splits multi-byte sequences and `mb_substr()` counts characters), followed by trimming the trailing partial word.
 
-Two OCS endpoints, admin-only by the framework's default posture: `PUT /settings/content-bytes` refuses a non-positive value; `PUT /settings/language` refuses anything outside the closed list, because an arbitrary regconfig name would make every PostgreSQL write fail.
+Two OCS endpoints, admin-only by the framework's default posture: `PUT /settings/content-bytes` refuses a non-positive value; `PUT /settings/language` refuses anything outside what the running engine itself reports (`pg_catalog.pg_ts_config`, read through the strategy), because a configuration name the engine below lacks would make every PostgreSQL write fail.
 
 | Privilege | Administrator | Any user |
 | --- | --- | --- |
@@ -501,7 +505,7 @@ Two OCS endpoints, admin-only by the framework's default posture: `PUT /settings
 
 ### Admin card
 
-A card inside the framework's own Full text search settings section, after the Elasticsearch platform's. It renders the first of three states that fails — the engine cannot search, the artefact is missing, the artefact does not hold every document — or "Ready", and carries the two settings with their warnings next to the control, not after Save: on PostgreSQL, `content_tsv` is stemmed with the configuration in force at write time and the query with the one in force now, so a changed language stops every indexed document from matching (measured on PostgreSQL 16, both directions: `to_tsvector('simple', 'els corrents del riu') @@ to_tsquery('catalan', 'corrents')` is false, and so is the swapped pair).
+A card inside the framework's own Full text search settings section, after the Elasticsearch platform's. It renders the first of three states that fails — the engine cannot search, the artefact is missing, the artefact does not hold every document — or "Ready", and carries the two settings with their warnings next to the control, not after Save: on PostgreSQL, `content_tsv` is stemmed with the configuration in force at write time and the query with the one in force now, so a changed language stops every indexed document from matching (measured on PostgreSQL 16, both directions: `to_tsvector('simple', 'els corrents del riu') @@ to_tsquery('catalan', 'corrents')` is false, and so is the swapped pair). The `<select>` offers exactly what the running engine reports, and names each language by its endonym — Nextcloud's own convention for language pickers, invariant of the viewer's locale, so the names carry no msgids — while storing the configuration name; `simple` is not a language and has no endonym, and shows as its own name.
 
 ## Dependencies / infrastructure
 
@@ -545,7 +549,7 @@ A unit tier that runs standalone against the published `nextcloud/ocp` package, 
 
 **Information leak through a dropped predicate.** Scenario: a stray invalid byte makes the parser see no terms, and the statement goes out with the access filter but no match predicate, answering with every document the viewer can see. Mitigation: invalid sequences are substituted, so a term always survives.
 
-**Configuration that breaks every write.** Scenario: an administrator's value for `language` reaches `to_tsvector()` as a regconfig name. Mitigation: a closed list, enforced by the endpoint and the same list the card offers.
+**Configuration that breaks every write.** Scenario: an administrator's value for `language` reaches `to_tsvector()` as a regconfig name. Mitigation: the offered list *is* the running engine's own `pg_catalog.pg_ts_config`, read live through the strategy and shared by the card, the endpoint and the read guard — a name can neither be offered that this engine lacks (the set varies: measured 16 configurations on PostgreSQL 9.6–11, `catalan` only since 14, `estonian` new in 18) nor be refused that it has. A value that reaches storage by other means than the endpoint heals to the default on read.
 
 **Hostile documents parsed in-process — the milestones ahead.** Scenario: a crafted OOXML, zip or PDF. The traps were measured: `LIBXML_NOENT` reads as a safety flag and *substitutes* entities, leaking `/etc/passwd` (12,192 bytes) even with `LIBXML_NONET`, which does not cover `file://`; `XMLReader` with `SUBST_ENTITIES` false blocks it. Prescribed mitigations: never pass `LIBXML_NOENT`, set `libxml_set_external_entity_loader(fn () => null)` as defence in depth, ratio pre-check plus bounded incremental inflate for zip bombs, a visited set and depth cap on PDF object graphs, hard caps on bytes read, characters emitted, wall-clock and nesting, and `catch (\Throwable)` per document. Accepted for now: a pathological file costs one document. Whether extraction must be reachable from a background job only, never synchronously from a web request, is a stretch goal, not decided.
 
@@ -564,58 +568,6 @@ AGPL-3.0-or-later, REUSE-compliant. The libraries the later milestones bundle ar
 - Repair-step output — the two warnings under Monitoring, into the `occ` command that ran it.
 - Per document, on the `IIndex` rather than the log: the error message, the exception class, and a severity.
 
-## Open issues
-
-### Open issue: where extraction plugs in
-
-**Problem.** `indexDocument()` receives the whole file base64-encoded, so extracting there costs 2.33× the file size in memory and needs a temp file, because `ZipArchive` cannot open a container held in a string; the `Files_FullTextSearch.onFileIndexing` event hands a listener a real `Node` to stream from, but only fires for the files provider, only with `files_fulltextsearch` installed, and only inside its own size gates.
-
-**Options.** (a) Option A only: correct for every provider, 2.33× everywhere. (b) A first, then B as a streaming fast path behind a stream-shaped extractor interface. (c) B only — not viable: base64 binary arrives from any provider whether B exists or not.
-
-**Proposed solution.** (b), with the extractor interface taking a stream from the first extractor, so B costs no rewrite.
-
-**Next step.** Decide before the first `XMLReader` extractor is designed, since its input type is the thing that changes. Author.
-
-### Open issue: narrowing filters that refuse on every engine
-
-**Problem.** Regex filters, wildcard filters, sub tags and simple queries refuse the search on all three engines. Regex could be honoured through `~` on PostgreSQL and `REGEXP` on MySQL; SQLite has no built-in `REGEXP` operator, and whether one can be registered through public API is unknown. If any checkbox in the files search UI sends one of these, that checkbox makes the search fail.
-
-**Options.** (a) Keep refusing, and document which UI controls it affects. (b) Honour each per engine where the operator exists, and refuse only where it does not. (c) Register a `REGEXP` function on SQLite if the public API allows it.
-
-**Proposed solution.** Nothing until the next step says which filters actually arrive.
-
-**Next step.** On a running instance, tick each box in the files search UI and record what `ISearchRequest` carries. Author.
-
-### Open issue: representing partial extraction and where its failures surface
-
-**Problem.** From Milestone 2 every gap is a failure to report, not a documented omission: a PDF that yields 3 of 40 pages, a budget that cut a document short, a `.doc` whose piece table did not parse, an encrypted file. `IIndex` has status flags and `setInfo()`; the log has levels; the admin has no per-document view. Milestone 1 distinguishes only "not extracted" (`ERROR_SEV_1`) from "provider bug" (`ERROR_SEV_3`).
-
-**Options.** (a) Index what was recovered, flag the document, keep the per-cause message in `addError()` — extends Milestone 1. (b) Refuse partial documents. (c) Add an admin-visible count per cause on the card.
-
-**Proposed solution.** (a) for the representation; (c) is a separate decision once causes exist.
-
-**Next step.** Fix the set of causes (encrypted, unsupported, parser gave up, budget cut) when Milestone 2 is designed in detail. Author.
-
-### Open issue: InnoDB FULLTEXT visibility under document-at-a-time writes
-
-**Problem.** The benchmark proved InnoDB can serve stale results after a bulk load and closed it with `--innodb-optimize-fulltext-only=1` plus `OPTIMIZE TABLE` — a server flag the app cannot set on a real instance. Whether the same happens under the platform's one-row-per-document writes is unmeasured; if it does, it shapes the whole MySQL write path.
-
-**Options.** (a) Reproduce with the harness that worked for the benchmark: twenty-five interleaved rounds of index-then-search, since a loop repeating one case runs clean and proves nothing. (b) Assume document-at-a-time is safe because the benchmark only saw it after bulk loads.
-
-**Proposed solution.** (a); (b) is how a flapping measurement once got published as `1.0` when the reproducible value was 0.6667.
-
-**Next step.** Add the interleaved harness to the integration tier against MariaDB 11.4 and MySQL 8.4. Author.
-
-### Open issue: extraction in the benchmark
-
-**Problem.** The corpus feeds text straight to the engines, so extraction is measured by one-off scripts. The only memory ceiling measured is PhpSpreadsheet's; PDF, `.doc` and `.ppt` are unmeasured, and `.xls` needs re-measuring once `setReadFilter()` drives it. Query sets built on assumptions have already been found to drift from what the engines see.
-
-**Options.** (a) Add real `.docx`, `.pdf`, `.odt` fixtures and a memory probe as a benchmark stage, so every extractor is measured on the same footing as the engines. (b) Keep extraction measurement ad hoc.
-
-**Proposed solution.** (a), before Milestone 3, where the numbers decide the route.
-
-**Next step.** Sequence it inside Milestone 2. Author.
-
 ## Resolved issues
 
 - **EPUB dropped from Milestone 2.** The draft listed `.epub` beside the office formats — a zip of XML that needs no library, like they do. Dropped before the first extractor was written: not needed here. An `.epub` is indexed on title, access and tags with the unsupported cause, like PDF and `.zip`; and the container-plus-XMLReader shape it would have used is already proven by OOXML and ODF, should it ever come back.
@@ -623,6 +575,20 @@ AGPL-3.0-or-later, REUSE-compliant. The libraries the later milestones bundle ar
 - **The PDF route is our own extractor, not the library** (the measurement the open issue asked for, taken 2026-09-16; kept in `benchmark/results/2026-09-16-pdf.json`). `smalot/pdfparser` 2.12.5 on the reference file — the 21.45 MiB, 756-page ISO 32000-1 — spends **6.00 s and 697.5 MiB of peak in `parseFile` alone**, fatal at the 512 MB floor before any text exists (the design's earlier measurement: 87.84 s and 704.3 MiB end to end), and its page-bounded and whole-document reads then crash with an uncaught `TypeError` (a null font in `PDFObject::getTJUsingFontFallback`); its only bound, `decodeMemoryLimit`, caps decompression, not the object graph. Option (a) refuted on its own premise — page bounding caps neither time nor memory, because the parse precedes any page — and option (b), whose earlier rejection was already recorded here as an inference from a scope rule that turned out not to exist, is the route: `lib/Extraction/Pdf/` reads the cross-reference index and then, per page, only what the page names, at **~7 s and a ~70 MiB marginal peak** on the same file, budget-cut as designed. The file itself turned out to carry the standard security handler with an empty user password, so the extractor decrypts that one class (RC4 revisions 2–4 and AES-128, the shape of every permission-restricted download); AES-256 revisions and real passwords stay the Encrypted cause.
 
 - **`ext-iconv` is moot: no library enters the app.** The reading the open issue asked for, for the record: `smalot/pdfparser` uses `iconv()` at exactly one call site (`Font.php`, decoding non-Unicode font encodings with `//TRANSLIT//IGNORE`, which `mbstring` does not replicate), so option (a) — declaring it in the manifest — would have been the answer. With the library gone, nothing in the app depends on `iconv`, `intl` or any module Nextcloud does not already require; the bundling tooling stays proven by its self-test, ready for Milestone 4's PhpOffice readers.
+
+- **The scoping pipeline patches namespace-root string literals — php-scoper cannot see them.** PhpWord, the third library Milestone 4 reads through, constructs a dozen class names by string concatenation: its collections, its writers, its factory. php-scoper rewrites every namespaced reference it can see in the AST, and a string literal is not one — the scoped copy asked for `PhpOffice\PhpWord\Collection\Bookmarks`, a class that exists nowhere once vendor/ stops being served: loadable in development, dead in production, the exact shape the pipeline exists to make impossible. The patcher in `scoper.inc.php` prefixes quoted literals at the root of each scoped package's own PSR-4 namespaces — the roots read from the packages' `composer.json`, the same derivation the finders use, not a hand-written list — and only literals that begin at a quote, since in this tree every dynamic construction starts its string at the namespace root. The self-test grew a regression for it: a fixture class that builds a sibling's name from a string and calls it, answered by the scoped copy through the app's autoloader alone (`composer run test:scoping`).
+
+- **The .xls read filter is a deadline, not a memory lever — measured before the extractor was designed** (`benchmark/results/2026-09-16-xls.json`). `setReadFilter()` does not bound the Xls reader: peaks are byte-identical with the filter, without it, and under `setReadDataOnly()` — the memory is the cell object model, ~22× the text bytes, ~120 MiB at the framework's own 20 MB upstream gate and affordable against the 512 MB floor that killed the PDF library route. What the filter does give is a hook the reader consults before creating each cell, and on a slow host the clock is the binding constraint (the container PHP spends ~10× longer inside `load()`): the extractor's filter is therefore a cooperative per-cell deadline — an over-budget workbook is halted by the clock at 10 s in the container and indexed on the ~1.2 MiB that survived, with the cause recorded, the same honest boundary the PDF and PPT extractors document. FILEPASS is read by this app's gate as the Encrypted cause, the reader's own answer being a generic decryption failure; formulas are skipped as the sheet's machinery, not its text.
+
+- **InnoDB FULLTEXT visibility under document-at-a-time writes: no staleness; the write path stands.** The interleaved harness the open issue prescribed lives in the integration tier (`InterleavedIndexSearchTest`: twenty-five rounds, each a fresh document indexed and searched in the same round, every fifth round a replace of an older document, every seventh a delete). Measured 2026-09-18 on MariaDB 11.4.7 and MySQL 8.4.6 (the CI images, Nextcloud 34.0.4; `benchmark/results/2026-09-18-innodb-visibility.json`): 200 assertions per engine, green — every just-written term is found by the very next search, every replaced-away and deleted term answers nothing at once, and the final sweep over all 22 live and 8 retired terms holds. The bulk-load staleness the benchmark closed with `--innodb-optimize-fulltext-only=1` does not reproduce under the platform's one-row transactional replace, so the MySQL write path needs nothing beyond it; the harness stays in the tier, so an engine regression fails a CI leg instead of a user's search.
+
+- **The narrowing filters that refuse are unreachable from the Nextcloud 34 UI — measured, checkbox by checkbox.** With a temporary capture of every `ISearchRequest` getter and a real browser session over every search surface (2026-09-18, NC 34.0.4 + fulltextsearch 34.0.1): the only live path to a platform is the unified search dialog, whose sole non-empty capabilities are the two widening ones already documented (`parts: ["comments"]`, `wildcard_fields: ["title"]`, on every search). The Date chip arrives as `options: {since, until}`; Places is client-side provider scoping and People never reaches the provider's endpoint. The framework's own search page renders empty and has no navigation entry; the files provider's options panel is an empty template, so nothing can set the `in:`/`files_extension`/source options that would have produced partial `limitFields` or `regexFilters`; and the legacy jQuery hook into the Files app is inert against its Vue rewrite — the Files search view is the core filename search (a content-only term finds nothing there). Option (a) stands, sharpened: the refusal only bites hand-built API requests, not any checkbox. The Date chip's options are honoured over the stored `modified` — the one omission a user could see.
+
+- **Partial extraction is represented and now counted: (a) and (c) both taken.** (a) landed with Milestone 2 — every gap is a cause on the document (encrypted, unsupported, parser gave up, budget cut), what was recovered is indexed, the per-cause message travels through `addError()`. (c) landed 2026-09-18: the cause is a column (`extraction_cause`, NULL meaning extraction completed — a provider bug is a severity, not a cause) and the admin card counts it per flag in every state, a counting failure hiding the numbers rather than the card. Proven in the integration tier (an .epub, a FILEPASS .xls and an over-budget text each counted; a clean re-index retires its flag) and in the browser.
+
+- **The extraction stage is the benchmark's, from Milestone 2 on.** Option (a) — real fixtures and a memory probe as a benchmark stage, every extractor measured on the same footing as the engines — is what shipped: `benchmark/extraction.php` over corpus-shaped containers with per-extractor and boundary scenarios, its measurements kept under `benchmark/results/` (the PDF route decision among them), later joined by the scale and access-filter stages (2026-09-18 on PostgreSQL: 100,000 documents at 280 docs/s with precision 1.0 and p95 1 ms; the access filter exact to the document over 20,000, a full-subset count at p95 87 ms, and the tokenless viewer finding nothing). Ad hoc one-off scripts remain only for questions the stage shapes cannot ask.
+
+- **Option (b) taken: the streaming fast path rides the files provider's indexing event.** A listener on `Files_FullTextSearch.onFileIndexing` extracts straight from the Node's stream through the extractors' own stream entry point — no base64, no decoded copy — and marks the outcome on the document, which `IndexMappingService` honours instead of extracting again; `indexDocument()` stays correct for every provider the event never reaches. Two measurements shaped it (`benchmark/results/2026-09-18-stream-path.json`): on Nextcloud 34 the event arrives by class name, not subject — subject-name listeners never fire (measured against 34.0.4) — and path A's transport alone costs 2.7x the file in peak (the design's 2.33x confirmed in direction and magnitude), while the fast path's floor is the extractor's own working set.
 
 ## Alternatives considered
 
