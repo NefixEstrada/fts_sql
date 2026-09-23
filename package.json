@@ -5,16 +5,32 @@
     "license": "AGPL-3.0-or-later",
     "private": true,
     "scripts": {
+        "build": "vite --mode production build",
+        "dev": "vite --mode development build",
+        "watch": "vite --mode development build --watch",
+        "typecheck": "vue-tsc --noEmit",
+        "check-types": "vue-tsc --noEmit",
+        "lint": "eslint --max-warnings=0 src vite.config.ts playwright.config.ts playwright/",
+        "lint:fix": "eslint --fix --max-warnings=0 src vite.config.ts playwright.config.ts playwright/",
+        "stylelint": "stylelint --max-warnings=0 'src/**/*.vue'",
+        "stylelint:fix": "stylelint --fix --max-warnings=0 'src/**/*.vue'",
+        "typescript:generate": "openapi-typescript ./openapi.json --immutable -o src/types/openapi/openapi.ts",
         "playwright": "playwright test",
         "playwright:ui": "playwright test --ui",
         "playwright:install": "playwright install chromium"
     },
     "devDependencies": {
         "@nextcloud/browserslist-config": "^3.1.2",
+        "@nextcloud/eslint-config": "^9.0.1",
+        "@nextcloud/stylelint-config": "^3.2.2",
         "@nextcloud/vite-config": "^2.5.4",
         "@playwright/test": "^1.62.1",
+        "eslint": "^10.10.0",
+        "openapi-typescript": "^7.13.0",
+        "stylelint": "^17.15.0",
         "typescript": "^5.9.3",
-        "vite": "^7.3.6"
+        "vite": "^7.3.6",
+        "vue-tsc": "^3.3.11"
     },
     "type": "module",
     "dependencies": {

@@ -1,0 +1,103 @@
+# Catalan translations for fts_sql.
+# Terminology checked against the Softcatalà translation memory and the
+# Nextcloud Catalan UI conventions: cerca (not recerca), llengua (Language),
+# compatible (not supported), xifrat (not encriptat), Desa (Save),
+# A punt (Ready), muntatge (build), analitzador (parser), extractor
+# d'arrels (stemmer), indicador (flag).
+msgid ""
+msgstr ""
+"Project-Id-Version: FTS SQL 1.0.0\n"
+"Report-Msgid-Bugs-To: https://github.com/nefixestrada/fts_sql/issues\n"
+"POT-Creation-Date: 2026-09-22 18:01+0200\n"
+"PO-Revision-Date: 2026-09-22 19:30+0200\n"
+"Last-Translator: Néfix Estrada <nefixestrada@gmail.com>\n"
+"Language-Team: Catalan\n"
+"Language: ca\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "FTS SQL"
+msgstr "FTS SQL"
+
+msgid "Full text search over the database Nextcloud already runs"
+msgstr "Cerca de text complet sobre la base de dades que el Nextcloud ja utilitza"
+
+msgid "this %s build cannot run full text search; FTS SQL will not index or answer searches"
+msgstr "aquest muntatge de %s no pot executar la cerca de text complet; FTS SQL no indexarà ni respondrà a les cerques"
+
+msgid "the search artefact does not hold every document stored so far; run `occ fulltextsearch:reset && occ fulltextsearch:index`"
+msgstr "l'índex de cerca no conté tots els documents emmagatzemats fins ara; executeu `occ fulltextsearch:reset && occ fulltextsearch:index`"
+
+msgid "this %s build cannot run full text search"
+msgstr "aquest muntatge de %s no pot executar la cerca de text complet"
+
+msgid "the search index artefact is missing in this database; re-enable the app or run `occ maintenance:repair`"
+msgstr "falta l'índex de cerca en aquesta base de dades; torneu a habilitar l'aplicació o executeu `occ maintenance:repair`"
+
+msgid "the search index does not hold every document the app has stored; run `occ fulltextsearch:reset && occ fulltextsearch:index`"
+msgstr "l'índex de cerca no conté tots els documents que l'aplicació ha emmagatzemat; executeu `occ fulltextsearch:reset && occ fulltextsearch:index`"
+
+msgid "Ready: the search index exists in this %s database"
+msgstr "A punt: l'índex de cerca existeix en aquesta base de dades %s"
+
+msgid "Ready"
+msgstr "A punt"
+
+msgid "Engine not supported"
+msgstr "El motor no és compatible"
+
+msgid "Engine cannot search"
+msgstr "El motor no pot cercar"
+
+msgid "Search index missing"
+msgstr "Falta l'índex de cerca"
+
+msgid "Index incomplete"
+msgstr "Índex incomplet"
+
+msgid "encrypted"
+msgstr "xifrat"
+
+msgid "unsupported format"
+msgstr "format no compatible"
+
+msgid "parser gave up"
+msgstr "l'analitzador s'ha rendit"
+
+msgid "cut at the content budget"
+msgstr "retallat en arribar al pressupost de contingut"
+
+msgid "cut at the engine's ceiling"
+msgstr "retallat en arribar al límit del motor"
+
+msgid "Documents indexed with an extraction flag"
+msgstr "Documents indexats amb un indicador d'extracció"
+
+msgid "Each is findable by what was recovered; the per-document message travels on its index entry."
+msgstr "Tots es poden trobar pel que se n'ha recuperat; el missatge de cada document queda registrat a la seva entrada d'índex."
+
+msgid "Text search language"
+msgstr "Llengua de la cerca de text"
+
+msgid "Changing it later invalidates every indexed document: stemmers differ per language, so a reindex is mandatory."
+msgstr "Canviar-la més endavant invalida tots els documents indexats: l'extractor d'arrels varia segons la llengua, així que cal tornar a indexar."
+
+msgid "Stored content per document (bytes)"
+msgstr "Contingut emmagatzemat per document (bytes)"
+
+msgid "The budget is bytes of extracted text, not file size. Raising it does not retro-fill documents already indexed."
+msgstr "El pressupost és en bytes de text extret, no la mida del fitxer. Augmentar-lo no reomple els documents ja indexats."
+
+msgid "Save"
+msgstr "Desa"
+
+msgid "Saved. A changed language needs occ fulltextsearch:reset && occ fulltextsearch:index."
+msgstr "Desat. Si canvieu la llengua, cal executar occ fulltextsearch:reset && occ fulltextsearch:index."
+
+msgid "SQL full-text search"
+msgstr "Cerca de text complet en SQL"
+
+msgid "Indexes and searches document content inside the database this instance already runs, with no external engine to set up."
+msgstr "Indexa i cerca el contingut dels documents dins de la base de dades que la instància ja fa servir, sense cap motor extern per configurar."

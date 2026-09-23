@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Transifex wiring for the fts_sql catalogue: the template below, the .po
+# files it becomes, and the l10n/ directory the release tarball ships.
+# Adjust the org/project slug once the Transifex project exists.
+[main]
+host = https://www.transifex.com
+
+[o:nefixestrada:p:fts_sql:r:fts_sql]
+file_filter = translationfiles/<lang>/fts_sql.po
+source_file = translationfiles/templates/fts_sql.pot
+source_lang = en
+type = PO

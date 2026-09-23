@@ -11,6 +11,8 @@
  * would pass unchanged.
  */
 
+import type { Page } from '@playwright/test'
+
 import { expect, test } from '@playwright/test'
 
 declare const OC: { generateUrl: (path: string) => string, requestToken: string }
@@ -18,7 +20,7 @@ declare const OC: { generateUrl: (path: string) => string, requestToken: string 
 const USER = process.env.NEXTCLOUD_USER ?? 'admin'
 const PASSWORD = process.env.NEXTCLOUD_PASSWORD ?? 'admin'
 
-async function login(page: import('@playwright/test').Page) {
+async function login(page: Page) {
 	await page.goto('login')
 	await page.locator('#user').fill(USER)
 	await page.locator('#password').fill(PASSWORD)
@@ -33,7 +35,7 @@ async function login(page: import('@playwright/test').Page) {
 	}))
 }
 
-async function openCard(page: import('@playwright/test').Page) {
+async function openCard(page: Page) {
 	await login(page)
 	await page.goto('settings/admin/fulltextsearch')
 	const card = page.locator('#fts_sql-admin')
@@ -69,11 +71,18 @@ test('carries both settings with their warnings next to the control', async ({ p
 		.toContainText('invalidates every indexed document')
 })
 
+// NcSelect is not a native select: open the combobox, then pick the option
+// from the listbox it drops. Options are named by endonyms — locale
+// invariant by design — and simple by its own name.
+async function chooseLanguage(page: Page, label: string) {
+	await page.getByLabel('Text search language').click()
+	await page.getByRole('option', { name: label, exact: true }).click()
+}
+
 test('saves the language and the budget, and they survive a reload', async ({ page }) => {
-	const language = page.getByLabel('Text search language')
 	const budget = page.getByLabel('Stored content per document (bytes)')
 
-	await language.selectOption('catalan')
+	await chooseLanguage(page, 'Català')
 	await budget.fill('1048576')
 	await page.getByRole('button', { name: 'Save' }).click()
 
@@ -83,13 +92,42 @@ test('saves the language and the budget, and they survive a reload', async ({ pa
 	await expect(page.locator('#fts_sql-admin')).toBeVisible()
 	// Read back from what the page was served with, not from what we typed:
 	// only the stored value explains a select that lands on the same option
-	// after a fresh render.
-	await expect(page.getByLabel('Text search language')).toHaveValue('catalan')
-	await expect(page.getByLabel('Stored content per document (bytes)')).toHaveValue('1048576')
+	// after a fresh render. NcSelect keeps its search input empty — the
+	// selection renders as the chip beside it.
+	await expect(page.locator('.fts_sql-admin__language .vs__selected')).toHaveText('Català')
+	await expect(budget).toHaveValue('1048576')
 
 	// Leave the instance as it was found.
-	await page.getByLabel('Text search language').selectOption('simple')
-	await page.getByLabel('Stored content per document (bytes)').fill('2097152')
+	await chooseLanguage(page, 'simple')
+	await budget.fill('2097152')
 	await page.getByRole('button', { name: 'Save' }).click()
 	await expect(page.locator('.fts_sql-admin__status')).toContainText('Saved')
+})
+
+test('offers and saves a configuration beyond the original four', async ({ page }) => {
+	// The select's options come from InitialState as the configurations the
+	// running PostgreSQL itself reports (pg_catalog.pg_ts_config, read
+	// live), grown from simple/catalan/spanish/english to that set; prove
+	// one of the newcomers end to end, named by its endonym.
+	await chooseLanguage(page, 'Deutsch')
+	await page.getByRole('button', { name: 'Save' }).click()
+
+	await expect(page.locator('.fts_sql-admin__status')).toContainText('Saved')
+
+	await page.reload()
+	await expect(page.locator('#fts_sql-admin')).toBeVisible()
+	await expect(page.locator('.fts_sql-admin__language .vs__selected')).toHaveText('Deutsch')
+
+	// Leave the instance as it was found.
+	await chooseLanguage(page, 'simple')
+	await page.getByRole('button', { name: 'Save' }).click()
+	await expect(page.locator('.fts_sql-admin__status')).toContainText('Saved')
+})
+
+test('shows no extraction flags when every document extracted whole', async ({ page }) => {
+	// Decision (c) of DESIGN.md's "representing partial extraction": the
+	// per-cause counts only render when a cause exists to name. This
+	// instance's documents all extract whole, so the section stays absent —
+	// the numbers themselves are the integration tier's to prove.
+	await expect(page.locator('#fts_sql-admin .fts_sql-admin__causes')).toHaveCount(0)
 })

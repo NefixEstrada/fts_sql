@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# What translationtool.phar must not scan: dependencies (their strings are
+# their apps' business), build output and the scoping machinery.
+vendor
+node_modules
+build
+lib/Vendor
+tools
+tests
+benchmark
