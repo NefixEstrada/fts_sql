@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Composer and npm only, on purpose: the workflow files under
+# .github/workflows/ are pristine nextcloud/.github templates plus patches,
+# tracked by actions-lock.txt — a dependabot bump there would be silently
+# reverted by the next template sync. The templates carry their own action
+# pins, and the sync carries the templates.
+version: 2
+updates:
+  - package-ecosystem: composer
+    directory: "/"
+    schedule:
+      interval: monthly
+    # The OCP branch follows the manifest's Nextcloud pin (stable34), not
+    # whatever is newest; update-nextcloud-ocp.yml moves it deliberately.
+    ignore:
+      - dependency-name: nextcloud/ocp
+
+  - package-ecosystem: composer
+    directory: "/vendor-bin/php-scoper"
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly

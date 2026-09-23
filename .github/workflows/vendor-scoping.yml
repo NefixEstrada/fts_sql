@@ -1,0 +1,56 @@
+# The bundling pipeline's own proof (DESIGN.md, Milestone 3) and the
+# composer manifest checks — the two static gates no official template
+# covers. A scratch composer project with a path-repository fixture is
+# scoped with the app's real prefix; the classes have to land under
+# OCA\FtsSql\Vendor, autoload out of lib/Vendor, and the unprefixed
+# original has to be gone. Network-free.
+#
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: Vendor scoping
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/vendor-scoping.yml'
+      - 'composer.json'
+      - 'composer.lock'
+      - 'tools/**'
+      - 'scoper.inc.php'
+      - 'vendor-bin/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vendor-scoping-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  scoping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up php 8.2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, xml, curl, dom
+          coverage: none
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Composer validate
+        run: composer validate --no-check-publish
+
+      - name: Install dependencies
+        run: composer install
+
+      - name: Scoping self-test
+        run: composer run test:scoping

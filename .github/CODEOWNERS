@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The line update-nextcloud-ocp's reviewer lookup greps for: the owners of
+# the manifest, notified on its automated dependency PRs.
+* @NefixEstrada
+/appinfo/info.xml @NefixEstrada

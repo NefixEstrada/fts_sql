@@ -1,0 +1,11 @@
+--- a/.github/workflows/fixup.yml
++++ b/.github/workflows/fixup.yml
+@@ -27,7 +27,7 @@
+       pull-requests: write
+     name: Block fixup and squash commits
+ 
+-    runs-on: ubuntu-latest-low
++    runs-on: ubuntu-latest
+ 
+     steps:
+       - name: Run check

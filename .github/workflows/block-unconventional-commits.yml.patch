@@ -1,0 +1,16 @@
+--- a/.github/workflows/block-unconventional-commits.yml
++++ b/.github/workflows/block-unconventional-commits.yml
+@@ -23,7 +23,7 @@
+   block-unconventional-commits:
+     name: Block unconventional commits
+ 
+-    runs-on: ubuntu-latest-low
++    runs-on: ubuntu-latest
+ 
+     steps:
+       - name: Checkout
+@@ -34,3 +34,4 @@
+       - uses: webiny/action-conventional-commits@7f91b1595ca1951cdb671ddc9f07a49081ec5b69 # v1.4.2
+         with:
+           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++          allowed-commit-types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, merge, wip, benchmark

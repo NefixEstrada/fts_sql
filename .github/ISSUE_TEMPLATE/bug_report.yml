@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Bug report
+description: Something does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report. The two details below — the
+        database engine and what `occ fulltextsearch:test` says — usually
+        carry most of the diagnosis.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected to see instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shorter the better; a document name and the exact query help.
+      placeholder: |
+        1. Search for …
+        2. …
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Database engine
+      options:
+        - PostgreSQL
+        - MySQL
+        - MariaDB
+        - SQLite
+        - "I don't know"
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Nextcloud version and FTS SQL version
+      description: "`occ status` and the version on Apps → FTS SQL (or appinfo/info.xml)."
+      placeholder: "Nextcloud 34.0.4, FTS SQL 1.0.0"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: |
+        What `occ fulltextsearch:test` prints, and any fts_sql lines in
+        `data/nextcloud.log`. No database passwords.
+      render: shell

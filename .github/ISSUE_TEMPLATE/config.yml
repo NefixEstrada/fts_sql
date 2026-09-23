@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and usage help
+    url: https://github.com/NefixEstrada/fts_sql/discussions
+    about: The README, DESIGN.md and docs/ cover a lot; a discussion thread fits questions better than an issue.

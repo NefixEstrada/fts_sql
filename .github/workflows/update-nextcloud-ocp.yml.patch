@@ -1,0 +1,37 @@
+--- a/.github/workflows/update-nextcloud-ocp.yml
++++ b/.github/workflows/update-nextcloud-ocp.yml
+@@ -22,9 +22,6 @@
+   update-nextcloud-ocp:
+     runs-on: ubuntu-latest
+ 
+-    # Only allowed to be run on nextcloud repositories
+-    if: ${{ github.repository_owner == 'nextcloud' }}
+-
+     env:
+       # env variable for maintainers: 'false' disables auto-merge for these pull requests
+       AUTOMERGE: true
+@@ -34,9 +31,6 @@
+       matrix:
+         branches:
+           - ${{ github.event.repository.default_branch }}
+-          - 'stable35'
+-          - 'stable34'
+-          - 'stable33'
+ 
+     name: update-nextcloud-ocp-${{ matrix.branches }}
+ 
+@@ -88,10 +82,10 @@
+             COMPOSER_CMD='composer bin nextcloud-ocp'
+           fi
+ 
+-          PACKAGE_VERSION="nextcloud/ocp:dev-$BRANCH_NAME"
+-          if [[ "$BRANCH_NAME" == 'main' ]]; then
+-            PACKAGE_VERSION='nextcloud/ocp:dev-master'
+-          fi
++          # The OCP branch the manifest pins — this app supports stable34,
++          # not master — the same derivation the local mirror makes.
++          STABLE="stable$(grep -oP '(?<=<nextcloud min-version=")[0-9]+' appinfo/info.xml)"
++          PACKAGE_VERSION="nextcloud/ocp:dev-$STABLE"
+ 
+           echo $COMPOSER_CMD require --dev $PACKAGE_VERSION
+           $COMPOSER_CMD require --dev $PACKAGE_VERSION

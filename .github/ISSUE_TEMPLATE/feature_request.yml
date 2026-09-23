@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Feature request
+description: An idea for something the app should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do, that the app does not let you?
+      description: The situation, not the solution — there may be a better one than the first that comes to mind.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: How would you expect it to work?

@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2026 Néfix Estrada
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The three database engines of .github/workflows/tests.yml's engines job,
+# from the same continuous-integration-* images the workflow's services use,
+# for tests/integration-env.sh to install a Nextcloud against. The published
+# ports match the workflow's so the install arguments are the same strings
+# both places; they are bound to 127.0.0.1 only.
+#
+# These containers are disposable: the script destroys the one it is about to
+# use (`rm --stop --volumes`) before every run, so every install meets an
+# empty database re-initialised by the image's own entrypoint. Never migrate
+# them, never keep anything in them.
+#
+# The healthchecks probe over TCP (-h 127.0.0.1), not the local socket: the
+# published port is the TCP one, and a server can be answering on the socket
+# before it listens on the port — `up --wait` would then hand the script a
+# container `occ maintenance:install` cannot reach yet. On the mariadb image
+# specifically, the probe binary is mariadb-admin (mysqladmin is gone past
+# MariaDB 10.4, the same reason the workflow's own health-cmd cites).
+services:
+  postgres:
+    image: ghcr.io/nextcloud/continuous-integration-postgres-16:latest
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: rootpassword
+      POSTGRES_DB: nextcloud
+    ports:
+      - "127.0.0.1:4446:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U root -d nextcloud"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mariadb:
+    image: ghcr.io/nextcloud/continuous-integration-mariadb-11.4:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: nextcloud
+    ports:
+      - "127.0.0.1:4444:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -P 3306 -prootpassword"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mysql:
+    image: ghcr.io/nextcloud/continuous-integration-mysql-8.4:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: nextcloud
+    ports:
+      - "127.0.0.1:4445:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P 3306 -prootpassword"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
