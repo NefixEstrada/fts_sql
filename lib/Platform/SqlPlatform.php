@@ -13,6 +13,7 @@ namespace OCA\FtsSql\Platform;
 use OC\FullTextSearch\Model\DocumentAccess;
 use OC\FullTextSearch\Model\IndexDocument;
 use OCA\FtsSql\Backends\BackendFactory;
+use OCA\FtsSql\Exceptions\UnknownDocument;
 use OCA\FtsSql\Exceptions\UnsupportedEngine;
 use OCA\FtsSql\Service\ConfigService;
 use OCA\FtsSql\Service\IndexMappingService;
@@ -228,13 +229,15 @@ class SqlPlatform implements IFullTextSearchPlatform {
 
 	/**
 	 * Rebuilds an IIndexDocument from the stored row, for
-	 * occ fulltextsearch:document:platform. The access object is rebuilt from
-	 * the token rows, undoing DocumentAccess::tokens()' prefixes.
+	 * occ fulltextsearch:document:platform — the administrator's console,
+	 * not a user-facing route, hence no access filter here. The access
+	 * object is rebuilt from the token rows, undoing
+	 * DocumentAccess::tokens()' prefixes.
 	 */
 	public function getDocument(string $providerId, string $documentId): IIndexDocument {
 		$row = $this->indexService->findRow($providerId, $documentId);
 		if ($row === null) {
-			throw new \Exception("unknown document $providerId/$documentId");
+			throw new UnknownDocument("unknown document $providerId/$documentId");
 		}
 
 		$access = new DocumentAccess((string)($row['owner'] ?? ''));

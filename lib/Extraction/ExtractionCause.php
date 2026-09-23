@@ -22,4 +22,9 @@ enum ExtractionCause: string {
 	case Unsupported = 'unsupported';
 	case ParserGaveUp = 'parser gave up';
 	case BudgetCut = 'budget cut';
+	/** PostgreSQL only: the tsvector ceiling (SQLSTATE 54000) cut the
+	 * content the halving retries landed under, after extraction itself
+	 * completed whole.
+	 */
+	case EngineCeiling = 'engine ceiling';
 }

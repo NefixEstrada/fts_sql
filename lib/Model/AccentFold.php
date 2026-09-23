@@ -69,4 +69,43 @@ final class AccentFold {
 	public static function fold(string $text): string {
 		return strtr($text, self::MAP);
 	}
+
+	/**
+	 * A case- and accent-insensitive match body for the folded form of
+	 * $text, anchored nowhere: every letter becomes a character class of
+	 * itself and of everything the MAP folds onto it, so the pattern finds
+	 * `ciències` from `ciencies` — against the stored text, whose accents
+	 * survive. Intended under the `ui` flags. The one-to-many folds (Æ, ß,
+	 * Œ, Þ, Ĳ) are not reversed: their folded output is longer than one
+	 * character, so no single-letter class can stand for them, and `ss`
+	 * simply will not match `ß`.
+	 */
+	public static function insensitivePattern(string $text): string {
+		$pattern = '';
+		foreach (mb_str_split(self::fold($text)) as $char) {
+			$sources = self::sourcesFoldingTo($char);
+			$pattern .= $sources === ''
+				? preg_quote($char, '/')
+				: '[' . preg_quote($char, '/') . $sources . ']';
+		}
+		return $pattern;
+	}
+
+	/**
+	 * The accented characters folding onto one folded character, escaped
+	 * for the inside of a character class; '' when nothing does.
+	 */
+	private static function sourcesFoldingTo(string $folded): string {
+		static $reversed = null;
+		if ($reversed === null) {
+			$reversed = [];
+			foreach (self::MAP as $source => $output) {
+				if (strlen($output) !== 1) {
+					continue;
+				}
+				$reversed[$output] = ($reversed[$output] ?? '') . preg_quote($source, '/');
+			}
+		}
+		return $reversed[$folded] ?? '';
+	}
 }

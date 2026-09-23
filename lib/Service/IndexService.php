@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace OCA\FtsSql\Service;
 
 use OCA\FtsSql\Backends\IBackend;
+use OCA\FtsSql\Extraction\ExtractionCause;
 use OCA\FtsSql\Model\IndexRow;
 use OCP\AppFramework\Db\TTransactional;
 use OCP\DB\Exception as DbException;
@@ -50,7 +51,14 @@ final class IndexService {
 
 		while (true) {
 			try {
-				$this->atomic(fn () => $this->replace($row, $content, $backend, $language), $this->db);
+				// A truncation that survives into the row is a cause like
+				// any other gap (decision (c)): the halvings flag the row
+				// `engine ceiling` unless extraction already flagged
+				// something more specific about the same content.
+				$cause = $halvings > 0 && $row->cause === null
+					? ExtractionCause::EngineCeiling
+					: $row->cause;
+				$this->atomic(fn () => $this->replace($row, $content, $cause, $backend, $language), $this->db);
 				return;
 			} catch (DbException $e) {
 				if (!self::isTsvectorTooLarge($e)
@@ -122,13 +130,34 @@ final class IndexService {
 		return $tokens;
 	}
 
-	private function replace(IndexRow $row, ?string $content, IBackend $backend, string $language): void {
+	/**
+	 * The countable half of the extraction causes (DESIGN.md, "Open issue:
+	 * representing partial extraction", decision (c)): how many stored
+	 * documents carry each flag. The admin card renders these next to the
+	 * state, so an administrator sees how many documents are findable by
+	 * less than everything they contain.
+	 *
+	 * @return array<string, int> cause token => flagged documents
+	 */
+	public function countCauses(): array {
+		$result = $this->db->executeQuery(
+			'SELECT extraction_cause AS cause, COUNT(*) AS flagged'
+			. ' FROM *PREFIX*fts_sql_documents WHERE extraction_cause IS NOT NULL GROUP BY extraction_cause',
+		);
+		$counts = [];
+		while (($row = $result->fetch()) !== false) {
+			$counts[(string)$row['cause']] = (int)$row['flagged'];
+		}
+		return $counts;
+	}
+
+	private function replace(IndexRow $row, ?string $content, ?ExtractionCause $cause, IBackend $backend, string $language): void {
 		$this->deleteArtifacts($row->providerId, $row->documentId);
 
 		$this->db->executeStatement(
 			'INSERT INTO *PREFIX*fts_sql_documents'
-			. ' (provider_id, document_id, owner, title, content, link, source, modified, hash)'
-			. ' VALUES (:provider_id, :document_id, :owner, :title, :content, :link, :source, :modified, :hash)',
+			. ' (provider_id, document_id, owner, title, content, link, source, modified, hash, extraction_cause)'
+			. ' VALUES (:provider_id, :document_id, :owner, :title, :content, :link, :source, :modified, :hash, :extraction_cause)',
 			[
 				'provider_id' => $row->providerId,
 				'document_id' => $row->documentId,
@@ -139,6 +168,7 @@ final class IndexService {
 				'source' => $row->source,
 				'modified' => $row->modified,
 				'hash' => $row->hash,
+				'extraction_cause' => $cause?->value,
 			],
 		);
 

@@ -26,6 +26,14 @@ use OCP\Migration\SimpleMigrationStep;
  * `content` carries no length on purpose: a length would make Doctrine emit
  * MySQL TEXT (65,535 bytes) instead of LONGTEXT, below the 2 MiB content
  * budget. Each table is guarded so re-running the step is harmless.
+ *
+ * `extraction_cause` (DESIGN.md, "Open issue: representing partial
+ * extraction", decision (c)): what was already reported per document through
+ * addError() becomes countable, so the admin card can show how many documents
+ * are indexed with each flag. Nullable by design — NULL is every document
+ * whose extraction completed (or whose failure is a provider bug, which is a
+ * severity, not a cause) — and wide enough for the longest cause token
+ * ('parser gave up').
  */
 class Version1000Date20260915193209 extends SimpleMigrationStep {
 
@@ -73,6 +81,10 @@ class Version1000Date20260915193209 extends SimpleMigrationStep {
 			$table->addColumn('hash', Types::STRING, [
 				'notnull' => false,
 				'length' => 64,
+			]);
+			$table->addColumn('extraction_cause', Types::STRING, [
+				'notnull' => false,
+				'length' => 16,
 			]);
 			$table->setPrimaryKey(['id']);
 			// One row per (provider, document): the replace-on-write strategy

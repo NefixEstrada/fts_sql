@@ -10,13 +10,17 @@ declare(strict_types=1);
 
 namespace OCA\FtsSql\Model;
 
+use OCA\FtsSql\Extraction\ExtractionCause;
+
 /**
  * What one document becomes after mapping, all pure (DESIGN.md, "Code
  * organisation"): the portable columns of fts_sql_documents, the access
  * tokens and tags that travel in their own tables, and how the content
  * extraction went — INDEX_CONTENT is unset on the IIndex unless
  * contentExtracted is true, and contentError lands on the document through
- * addError() with its severity.
+ * addError() with its severity. The cause is the countable half of the same
+ * outcome: it is what the admin card counts per flag, null when extraction
+ * completed (a provider bug is a severity, not a cause).
  */
 final class IndexRow {
 	/**
@@ -39,6 +43,7 @@ final class IndexRow {
 		public readonly array $tags,
 		public readonly bool $contentExtracted,
 		public readonly ?string $contentError,
+		public readonly ?ExtractionCause $cause = null,
 		public readonly int $contentErrorSeverity = 0,
 	) {
 	}

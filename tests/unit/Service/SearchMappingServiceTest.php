@@ -253,6 +253,33 @@ class SearchMappingServiceTest extends TestCase {
 		SearchMappingService::compile('files', self::request('museu'), self::access(), self::postgresBackend(), 'catalan');
 	}
 
+	public function testAPagePastTheOffsetCeilingCompilesEmpty(): void {
+		$search = SearchMappingService::compile(
+			'files',
+			self::request('museu', size: 20, page: 5002),
+			self::access(viewer: 'carla'),
+			self::postgresBackend(),
+			'catalan',
+		);
+
+		$this->assertStringContainsString("\n  AND 1 = 0", $search->pageSql);
+		$this->assertStringContainsString("\n  AND 1 = 0", $search->countSql);
+	}
+
+	public function testTheLastPageWithinTheOffsetCeilingStillPages(): void {
+		$search = SearchMappingService::compile(
+			'files',
+			self::request('museu', size: 20, page: 5001),
+			self::access(viewer: 'carla'),
+			self::postgresBackend(),
+			'catalan',
+		);
+		// offset 100000 = page 5001 at 20 — the boundary itself stays a page.
+
+		$this->assertStringNotContainsString('1 = 0', $search->pageSql);
+		$this->assertSame(100000, $search->parameters['offset']);
+	}
+
 	/**
 	 * The PostgreSQL strategy's answer from the worked example, as a fixed
 	 * stub: how the predicate, rank and parameters land in the shared
@@ -270,11 +297,53 @@ class SearchMappingServiceTest extends TestCase {
 		return $backend;
 	}
 
-	private function request(string $search = '', int $size = 20, int $page = 2): ISearchRequest {
+	public function testTheUnifiedSearchDateRangeNarrowsOverModified(): void {
+		$backend = self::createMock(IBackend::class);
+		$backend->method('matchExpression')->willReturn(new CompiledMatch('m', '0', []));
+
+		$search = SearchMappingService::compile(
+			'files',
+			self::request('museu', options: ['since' => '1789164000', 'until' => '1789768799']),
+			self::access(viewer: 'biel'),
+			$backend,
+			'simple',
+		);
+
+		$this->assertStringContainsString('
+  AND d.modified >= :since
+  AND d.modified <= :until', $search->pageSql);
+		$this->assertStringContainsString('
+  AND d.modified >= :since
+  AND d.modified <= :until', $search->countSql);
+		$this->assertSame(1789164000, $search->parameters['since']);
+		$this->assertSame(1789768799, $search->parameters['until']);
+	}
+
+	public function testAGarbageDateOptionKeepsTheSearchUnnarrowed(): void {
+		$backend = self::createMock(IBackend::class);
+		$backend->method('matchExpression')->willReturn(new CompiledMatch('m', '0', []));
+
+		$search = SearchMappingService::compile(
+			'files',
+			self::request('museu', options: ['since' => 'not-a-number']),
+			self::access(viewer: 'biel'),
+			$backend,
+			'simple',
+		);
+
+		$this->assertStringNotContainsString('d.modified', $search->pageSql);
+		$this->assertStringNotContainsString('d.modified', $search->countSql);
+		$this->assertArrayNotHasKey('since', $search->parameters);
+	}
+
+	private function request(string $search = '', int $size = 20, int $page = 2, array $options = []): ISearchRequest {
 		$request = self::createMock(ISearchRequest::class);
 		$request->method('getSearch')->willReturn($search);
 		$request->method('getSize')->willReturn($size);
 		$request->method('getPage')->willReturn($page);
+		$request->method('getOption')->willReturnCallback(
+			static fn (string $key, string $default = ''): string => $options[$key] ?? $default,
+		);
 		return $request;
 	}
 

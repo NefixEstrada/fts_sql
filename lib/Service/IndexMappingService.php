@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace OCA\FtsSql\Service;
 
 use OCA\FtsSql\Extraction\ExtractionCause;
+use OCA\FtsSql\Listener\FilesIndexingListener;
 use OCA\FtsSql\Model\DocumentAccess;
 use OCA\FtsSql\Model\IndexRow;
 use OCP\FullTextSearch\Model\IIndex;
@@ -36,7 +37,7 @@ final class IndexMappingService {
 		$owner = $access->getOwnerId();
 		$hash = $document->getHash();
 
-		[$contentExtracted, $content, $contentError, $severity] = self::extractContent($document, $budget);
+		[$contentExtracted, $content, $contentError, $severity, $cause] = self::extractContent($document, $budget);
 
 		return new IndexRow(
 			providerId: $document->getProviderId(),
@@ -52,6 +53,7 @@ final class IndexMappingService {
 			tags: self::tags($document),
 			contentExtracted: $contentExtracted,
 			contentError: $contentError,
+			cause: $cause,
 			contentErrorSeverity: $severity,
 		);
 	}
@@ -66,11 +68,35 @@ final class IndexMappingService {
 	 * cause that also extracts: its text is recovered content, so the row
 	 * carries content and the flag together (DESIGN.md, "Open issue:
 	 * representing partial extraction" — index what was recovered, flag the
-	 * document, keep the per-cause message in addError()).
+	 * document, keep the per-cause message in addError()). The cause is also
+	 * what the admin card counts per flag: it travels on the row next to the
+	 * message, null only when extraction completed — a provider bug is a
+	 * severity, not a cause.
 	 *
-	 * @return array{bool, ?string, ?string, int} extracted?, content, error, severity
+	 * Before any of that: the streaming fast path may already have
+	 * extracted. Its marker under FilesIndexingListener::INFO_KEY carries
+	 * the outcome, and its text sits in the document's content — the
+	 * extension would only mislead here (a .docx whose content is already
+	 * plain text), so the marker short-circuits the whole extraction.
+	 *
+	 * @return array{bool, ?string, ?string, int, ?ExtractionCause} extracted?, content, error, severity, cause
 	 */
 	private static function extractContent(IIndexDocument $document, int $budget): array {
+		$streamed = $document->getInfoArray(FilesIndexingListener::INFO_KEY);
+		if ($streamed !== []) {
+			$cause = isset($streamed['cause'])
+				? ExtractionCause::tryFrom((string)$streamed['cause'])
+				: null;
+			$message = (string)($streamed['message'] ?? '');
+			return [
+				(bool)($streamed['extracted'] ?? false),
+				$document->getContent(),
+				$message !== '' ? $message : null,
+				$cause === null ? 0 : IIndex::ERROR_SEV_1,
+				$cause,
+			];
+		}
+
 		if ($document->isContentEncoded() === IIndexDocument::ENCODED_BASE64) {
 			$bytes = base64_decode($document->getContent(), true);
 			if ($bytes === false) {
@@ -79,6 +105,7 @@ final class IndexMappingService {
 					null,
 					'the provider flagged the content as base64 but it does not decode — a transport bug on the provider\'s side, not this app\'s',
 					IIndex::ERROR_SEV_3,
+					null,
 				];
 			}
 		} else {
@@ -91,12 +118,12 @@ final class IndexMappingService {
 		$result = ExtractionService::extract($bytes, $extension, $budget);
 
 		if ($result->cause === null) {
-			return [true, $result->text, null, 0];
+			return [true, $result->text, null, 0, null];
 		}
 		if ($result->cause === ExtractionCause::BudgetCut) {
-			return [true, $result->text, $result->message, IIndex::ERROR_SEV_1];
+			return [true, $result->text, $result->message, IIndex::ERROR_SEV_1, $result->cause];
 		}
-		return [$result->text !== null, $result->text, $result->message, IIndex::ERROR_SEV_1];
+		return [$result->text !== null, $result->text, $result->message, IIndex::ERROR_SEV_1, $result->cause];
 	}
 
 	/**

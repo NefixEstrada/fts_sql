@@ -13,6 +13,7 @@ namespace OCA\FtsSql\Tests\Integration\Platform;
 use OC\FullTextSearch\Model\DocumentAccess;
 use OC\FullTextSearch\Model\IndexDocument;
 use OCA\FtsSql\Platform\SqlPlatform;
+use OCA\FtsSql\Service\IndexService;
 use OCA\FtsSql\Tests\Fixtures;
 use OCA\FullTextSearch\Model\Index;
 use OCA\FullTextSearch\Model\SearchRequest;
@@ -155,6 +156,42 @@ class SqlPlatformTest extends TestCase {
 		$this->assertTrue($index->isStatus(IIndex::INDEX_FAILED), 'an access with no identity must fail closed');
 	}
 
+	/**
+	 * Decision (c) of DESIGN.md's "Open issue: representing partial
+	 * extraction": what addError() already reports per document becomes
+	 * countable per cause, over the column the row now stores — the admin
+	 * card's numbers are this query. assertEquals, not assertSame: a GROUP
+	 * BY's row order belongs to the engine.
+	 */
+	public function testExtractionCausesAreCountablePerFlag(): void {
+		$owner = new DocumentAccess('biel');
+
+		$this->platform->indexDocument(
+			$this->containerDocument('sortida-museu.epub', 'a zip of XML nobody claims', $owner),
+		);
+		$this->platform->indexDocument(
+			$this->containerDocument('sortida-museu.xls', Fixtures::xlsEncryptedToken(['museu']), $owner),
+		);
+		$this->platform->indexDocument(
+			$this->document('giant-2', str_repeat('paraula ', 400_000), $owner), // ~3.2 MB, past the 2 MiB budget
+		);
+		$this->platform->indexDocument($this->document('nete-1', 'text net', $owner));
+
+		$this->assertEquals(
+			['encrypted' => 1, 'unsupported' => 1, 'budget cut' => 1],
+			Server::get(IndexService::class)->countCauses(),
+			'a flagged document per cause, and the clean one counted nowhere',
+		);
+
+		// A re-index that extracts clean takes the flag back out: the cause
+		// column travels with the replace-on-write row.
+		$this->platform->indexDocument($this->document('giant-2', 'ara sóc petit', $owner));
+		$this->assertEquals(
+			['encrypted' => 1, 'unsupported' => 1],
+			Server::get(IndexService::class)->countCauses(),
+		);
+	}
+
 	public function testHealthProbe(): void {
 		$this->assertTrue($this->platform->testPlatform());
 	}
@@ -189,6 +226,14 @@ class SqlPlatformTest extends TestCase {
 		$stored = $this->platform->getDocument('test_provider', 'giant-1');
 		$this->assertLessThan(strlen($content), strlen($stored->getContent()), 'the content landed truncated by the halvings');
 
+		// The truncation is a cause like any other gap (decision (c)): the
+		// row is flagged for the admin card's ledger, counted per flag.
+		$this->assertEquals(
+			['engine ceiling' => 1],
+			Server::get(IndexService::class)->countCauses(),
+			'a document the engine ceiling truncated lands flagged',
+		);
+
 		$viewer = new DocumentAccess();
 		$viewer->setViewerId('biel');
 		$this->assertSame(1, $this->search('zzqj00000001', $viewer)->getTotal(), 'findable by what survived');
@@ -207,13 +252,37 @@ class SqlPlatformTest extends TestCase {
 		$this->assertSame('sortida al museu', $stored->getContent());
 	}
 
-	private function document(string $id, string $content, DocumentAccess $access): IIndexDocument {
+	/**
+	 * The unified search's Date chip arrives as options on the request
+	 * (measured in the UI inventory): it narrows over the stored `modified`,
+	 * on every engine the integration tier covers.
+	 */
+	public function testTheUnifiedSearchDateRangeNarrowsResults(): void {
+		$owner = new DocumentAccess('biel');
+		$this->platform->indexDocument($this->document('vell-1', 'text vell del museu', $owner, modified: 1000));
+		$this->platform->indexDocument($this->document('nou-1', 'text nou del museu', $owner, modified: 2000000000));
+
+		$viewer = new DocumentAccess();
+		$viewer->setViewerId('biel');
+
+		$since = $this->search('museu', $viewer, ['since' => '1500']);
+		$this->assertSame(1, $since->getTotal());
+		$this->assertSame('nou-1', $since->getDocuments()[0]->getId());
+
+		$until = $this->search('museu', $viewer, ['until' => '1500']);
+		$this->assertSame(1, $until->getTotal());
+		$this->assertSame('vell-1', $until->getDocuments()[0]->getId());
+
+		$this->assertSame(2, $this->search('museu', $viewer, ['since' => '500', 'until' => '2500000000'])->getTotal());
+	}
+
+	private function document(string $id, string $content, DocumentAccess $access, ?int $modified = null): IIndexDocument {
 		$document = new IndexDocument('test_provider', $id);
 		$document->setIndex(new Index('test_provider', $id));
 		$document->setAccess($access);
 		$document->setTitle("Escola/Sortida al Museu de Ciències $id.txt");
 		$document->setContent(base64_encode($content), IIndexDocument::ENCODED_BASE64);
-		$document->setModifiedTime(time());
+		$document->setModifiedTime($modified ?? time());
 		return $document;
 	}
 
@@ -231,9 +300,12 @@ class SqlPlatformTest extends TestCase {
 		return $document;
 	}
 
-	private function search(string $terms, DocumentAccess $access): ISearchResult {
+	private function search(string $terms, DocumentAccess $access, array $options = []): ISearchResult {
 		$request = new SearchRequest();
 		$request->setSearch($terms);
+		foreach ($options as $key => $value) {
+			$request->addOption($key, $value);
+		}
 		$result = new SearchResult($request);
 		$result->setProvider($this->provider);
 		$this->platform->searchRequest($result, $access);

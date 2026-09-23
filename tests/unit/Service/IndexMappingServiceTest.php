@@ -11,6 +11,8 @@ declare(strict_types=1);
 namespace OCA\FtsSql\Tests\Unit\Service;
 
 use OCA\FtsSql\Exceptions\AccessIsEmpty;
+use OCA\FtsSql\Extraction\ExtractionCause;
+use OCA\FtsSql\Listener\FilesIndexingListener;
 use OCA\FtsSql\Service\IndexMappingService;
 use OCA\FtsSql\Tests\Fixtures;
 use OCP\FullTextSearch\Model\IDocumentAccess;
@@ -25,7 +27,9 @@ use PHPUnit\Framework\TestCase;
  * extractor yet (expected, ERROR_SEV_1) — and, from Milestone 2, the
  * documents that arrive: a .docx on its body text, a password-protected
  * one without content, and a budget cut that extracts and flags together.
- * All of them still yield a full row.
+ * All of them still yield a full row, and each carries its countable cause
+ * (decision (c): what the admin card counts per flag), null exactly when
+ * extraction completed — a provider bug is a severity, not a cause.
  */
 class IndexMappingServiceTest extends TestCase {
 
@@ -53,6 +57,7 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertSame([['kind' => 'meta', 'value' => 'files_local']], $row->tags);
 		$this->assertTrue($row->contentExtracted);
 		$this->assertNull($row->contentError);
+		$this->assertNull($row->cause);
 		$this->assertSame(0, $row->contentErrorSeverity);
 	}
 
@@ -71,6 +76,7 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertNull($row->content);
 		$this->assertNotNull($row->contentError);
 		$this->assertStringContainsString('base64', $row->contentError);
+		$this->assertNull($row->cause, 'a provider bug is a severity, not a cause');
 		$this->assertSame(IIndex::ERROR_SEV_3, $row->contentErrorSeverity);
 		// The row is still whole: title, access and tags travel.
 		$this->assertSame('Escola/Sortida al Museu de Ciències.txt', $row->title);
@@ -92,6 +98,7 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertNull($row->content);
 		$this->assertNotNull($row->contentError);
 		$this->assertStringContainsString('epub', $row->contentError);
+		$this->assertSame(ExtractionCause::Unsupported, $row->cause);
 		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
 		$this->assertSame('Escola/Sortida al Museu de Ciències.epub', $row->title);
 	}
@@ -110,6 +117,7 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertNull($row->content);
 		$this->assertNotNull($row->contentError);
 		$this->assertStringContainsString('pdf', $row->contentError);
+		$this->assertSame(ExtractionCause::ParserGaveUp, $row->cause);
 		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
 	}
 
@@ -145,6 +153,7 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertNull($row->content);
 		$this->assertNotNull($row->contentError);
 		$this->assertStringContainsString('password-protected', $row->contentError);
+		$this->assertSame(ExtractionCause::Encrypted, $row->cause);
 		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
 	}
 
@@ -165,7 +174,56 @@ class IndexMappingServiceTest extends TestCase {
 		$this->assertSame('aa', $row->content);
 		$this->assertNotNull($row->contentError);
 		$this->assertStringContainsString('budget', $row->contentError);
+		$this->assertSame(ExtractionCause::BudgetCut, $row->cause);
 		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
+	}
+
+	public function testAStreamedMarkerShortCircuitsTheExtraction(): void {
+		// Path B's outcome: a .docx whose content is already extracted plain
+		// text. Running the extractors again on it would read a zip out of
+		// prose and fail — the marker is what stops that.
+		$document = self::document(
+			title: 'Escola/Sortida al Museu de Ciències.docx',
+			content: 'sortida al museu, ja extret',
+			info: ['extracted' => true, 'cause' => null, 'message' => ''],
+		);
+
+		$row = IndexMappingService::map($document, 2097152);
+
+		$this->assertTrue($row->contentExtracted);
+		$this->assertSame('sortida al museu, ja extret', $row->content);
+		$this->assertNull($row->contentError);
+		$this->assertNull($row->cause);
+		$this->assertSame(0, $row->contentErrorSeverity);
+	}
+
+	public function testAStreamedMarkerCarriesItsCauseAndMessage(): void {
+		$document = self::document(
+			title: 'Escola/Sortida al Museu de Ciències.docx',
+			content: 'aa',
+			info: ['extracted' => true, 'cause' => 'budget cut', 'message' => 'the content was cut at the budget'],
+		);
+
+		$row = IndexMappingService::map($document, 2097152);
+
+		$this->assertSame('aa', $row->content);
+		$this->assertSame(ExtractionCause::BudgetCut, $row->cause);
+		$this->assertSame('the content was cut at the budget', $row->contentError);
+		$this->assertSame(IIndex::ERROR_SEV_1, $row->contentErrorSeverity);
+	}
+
+	public function testAStreamedMarkerWithoutTextExtractsNothing(): void {
+		$document = self::document(
+			title: 'Escola/Sortida al Museu de Ciències.docx',
+			content: '',
+			info: ['extracted' => false, 'cause' => 'encrypted', 'message' => 'the document is password-protected'],
+		);
+
+		$row = IndexMappingService::map($document, 2097152);
+
+		$this->assertFalse($row->contentExtracted);
+		$this->assertSame(ExtractionCause::Encrypted, $row->cause);
+		$this->assertSame('the document is password-protected', $row->contentError);
 	}
 
 	public function testAnEmptyOwnerBecomesNullInTheRow(): void {
@@ -204,6 +262,7 @@ class IndexMappingServiceTest extends TestCase {
 		?IDocumentAccess $access = null,
 		array $tags = [],
 		string $hash = 'abc123',
+		array $info = [],
 	): IIndexDocument {
 		$document = self::createMock(IIndexDocument::class);
 		$document->method('getProviderId')->willReturn('files');
@@ -217,6 +276,9 @@ class IndexMappingServiceTest extends TestCase {
 		$document->method('getSource')->willReturn('files');
 		$document->method('getModifiedTime')->willReturn(1757984400);
 		$document->method('getHash')->willReturn($hash);
+		$document->method('getInfoArray')->willReturnCallback(
+			static fn (string $key): array => $key === FilesIndexingListener::INFO_KEY ? $info : [],
+		);
 		return $document;
 	}
 

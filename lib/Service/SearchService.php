@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace OCA\FtsSql\Service;
 
 use OCA\FtsSql\Backends\IBackend;
+use OCA\FtsSql\Model\AccentFold;
 use OCA\FtsSql\Model\CompiledSearch;
 use OCA\FtsSql\Model\SearchQuery;
 use OCP\DB\Exception as DbException;
@@ -80,6 +81,12 @@ final class SearchService {
 	 * stripped, or from the start when there is none. Cut in PHP identically
 	 * on all engines: MySQL has no native snippet, so there are not going to
 	 * be three notions of one.
+	 *
+	 * The occurrence is also accent-insensitive, the way the match itself
+	 * is: the query folded to find `ciències` deserves an excerpt centred
+	 * on the word, not the first 200 characters of the document. The
+	 * pattern matches against the stored text directly, so what it cuts
+	 * keeps its accents.
 	 */
 	public static function excerpt(string $content, string $search): string {
 		if ($content === '') {
@@ -88,6 +95,10 @@ final class SearchService {
 
 		$needle = trim((string)preg_replace('/[+\-"]/', ' ', $search));
 		$position = $needle === '' ? false : mb_stripos($content, $needle);
+		if ($position === false && $needle !== ''
+			&& preg_match('/' . AccentFold::insensitivePattern($needle) . '/ui', $content, $match, PREG_OFFSET_CAPTURE) === 1) {
+			$position = mb_strlen(substr($content, 0, $match[0][1]));
+		}
 		$start = $position === false ? 0 : max(0, $position - self::EXCERPT_BEFORE);
 
 		return mb_substr($content, $start, self::EXCERPT_LENGTH);

@@ -13,6 +13,7 @@ namespace OCA\FtsSql\Migration;
 use OCA\FtsSql\Backends\BackendFactory;
 use OCA\FtsSql\Exceptions\UnsupportedEngine;
 use OCP\IDBConnection;
+use OCP\IL10N;
 use OCP\Migration\IOutput;
 use OCP\Migration\IRepairStep;
 
@@ -28,6 +29,7 @@ final class CreateSearchArtefact implements IRepairStep {
 	public function __construct(
 		private BackendFactory $factory,
 		private IDBConnection $db,
+		private IL10N $l10n,
 	) {
 	}
 
@@ -45,8 +47,7 @@ final class CreateSearchArtefact implements IRepairStep {
 
 		if (!$backend->isUsable()) {
 			$output->warning(
-				'this ' . $backend->name() . ' build cannot run full text search; '
-				. 'FTS SQL will not index or answer searches',
+				$this->l10n->t('this %s build cannot run full text search; FTS SQL will not index or answer searches', [$backend->name()]),
 			);
 			return;
 		}
@@ -61,8 +62,7 @@ final class CreateSearchArtefact implements IRepairStep {
 		// in an FTS5 rebuild and never get here.
 		if ($backend->hasUnindexedDocuments()) {
 			$output->warning(
-				'the search artefact does not hold every document stored so far; '
-				. 'run `occ fulltextsearch:reset && occ fulltextsearch:index`',
+				$this->l10n->t('the search artefact does not hold every document stored so far; run `occ fulltextsearch:reset && occ fulltextsearch:index`'),
 			);
 		}
 	}

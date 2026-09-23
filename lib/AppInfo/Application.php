@@ -11,16 +11,22 @@ declare(strict_types=1);
 namespace OCA\FtsSql\AppInfo;
 
 use OCA\FtsSql\ConfigLexicon;
+use OCA\FtsSql\Listener\FilesIndexingListener;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\EventDispatcher\GenericEvent;
 use OCP\IDBConnection;
 
 /**
  * The app's entry point. Nextcloud instantiates this class for every request that
  * touches the app, so keep it cheap: register things here, do not do work here.
- * The platform itself is declared in info.xml, not here.
+ * The platform itself is declared in info.xml, not here — the listener is the
+ * one registration beyond the lexicon: the streaming fast path (DESIGN.md,
+ * "Open issue: where extraction plugs in", option (b)) plugs in at the files
+ * provider's indexing event, and on Nextcloud 34 that event is a GenericEvent
+ * delivered by class name, so that is what the registration listens on.
  */
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'fts_sql';
@@ -35,6 +41,14 @@ class Application extends App implements IBootstrap {
 	 */
 	public function register(IRegistrationContext $context): void {
 		$context->registerConfigLexicon(ConfigLexicon::class);
+		/**
+		 * @psalm-suppress DeprecatedClass GenericEvent is what
+		 *                files_fulltextsearch 34 still dispatches its
+		 *                extension events as, delivered by class name —
+		 *                subject-name listeners never fire (measured against
+		 *                34.0.4); the listener filters the subject itself
+		 */
+		$context->registerEventListener(GenericEvent::class, FilesIndexingListener::class);
 	}
 
 	/**

@@ -36,8 +36,6 @@ final class XmlWalk {
 	public const MAX_DEPTH = 64;
 	public const TIME_CAP = 10.0;
 
-	private static bool $hardened = false;
-
 	/**
 	 * Feed every node to $onNode; returning false stops before the end (the
 	 * sink is full) and suppresses the malformed check.
@@ -54,6 +52,7 @@ final class XmlWalk {
 		$reader = new XMLReader();
 		libxml_clear_errors();
 		if (!$reader->XML($xml, null, LIBXML_NONET)) {
+			self::soften();
 			throw new ExtractionAbort(ExtractionCause::ParserGaveUp, 'the XML could not be opened');
 		}
 
@@ -89,6 +88,7 @@ final class XmlWalk {
 		} finally {
 			libxml_clear_errors();
 			$reader->close();
+			self::soften();
 		}
 	}
 
@@ -160,20 +160,26 @@ final class XmlWalk {
 	}
 
 	/**
-	 * libxml state is process-wide and XMLReader populates the shared error
-	 * list, so this is set once and never undone: internal errors are what
-	 * keeps parse errors queryable instead of printed, and a null external
-	 * entity loader makes every external entity unloadable even for code
-	 * elsewhere in the process that does pass LIBXML_NOENT. There is no
-	 * getter to save and restore the previous loader; blocking entities
-	 * process-wide is the defence in depth, and the blocker is the point.
+	 * libxml state is process-wide, so the walk's hardening is scoped, not
+	 * permanent: internal errors are what keep parse errors queryable
+	 * instead of printed, and a null external entity loader makes every
+	 * external entity unloadable even for code that does pass
+	 * LIBXML_NOENT. There is no getter to save the previous loader — the
+	 * best a walk can do is block for itself and restore the default
+	 * (null does restore it; measured) when it ends, leaving unrelated
+	 * code in the same process — an app validating an XSD, say — as it
+	 * found it outside the walk.
 	 */
 	private static function harden(): void {
-		if (self::$hardened) {
-			return;
-		}
 		libxml_use_internal_errors(true);
 		libxml_set_external_entity_loader(static fn () => null);
-		self::$hardened = true;
+	}
+
+	/**
+	 * The walk's counterpart of harden(): the default loader back, so the
+	 * block never outlives the walk that asked for it.
+	 */
+	private static function soften(): void {
+		libxml_set_external_entity_loader(null);
 	}
 }
