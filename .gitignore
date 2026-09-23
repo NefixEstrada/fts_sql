@@ -4,11 +4,13 @@
 node_modules/
 test-results/
 playwright-report/
-# Vite build output; the plain-JavaScript files it replaces are tracked.
+# Vite build output (the build empties js/ and css/ first): nothing built
+# is committed — a fresh checkout, `make build` and `make appstore` run
+# `npm ci && npm run build` themselves.
 js/*.mjs
 js/*.mjs.map
 js/*.license
-css/*.chunk.css
+css/*.css
 vendor/
 .php-cs-fixer.cache
 composer.lock

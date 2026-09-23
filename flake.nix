@@ -37,6 +37,8 @@
               phpBase.packages.composer
               pkgs.nodejs_22
               pkgs.libxml2 # xmllint, for `make appstore`
+              pkgs.gettext # xgettext & co, for `make l10n`
+              pkgs.reuse # reuse lint, the same REUSE check the CI's reuse.yml runs
               pkgs.gnumake
               pkgs.rsync
               pkgs.gnutar

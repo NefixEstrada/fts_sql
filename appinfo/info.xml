@@ -11,15 +11,28 @@
 	<summary>Full text search over the database Nextcloud already runs</summary>
   <description><![CDATA[A full text search platform for the fulltextsearch framework that indexes into the
 database the Nextcloud instance already runs — PostgreSQL, MySQL/MariaDB or SQLite — so nobody has to
-operate Elasticsearch to get full text search. Plain text and the OOXML and ODF office formats (.docx,
-.xlsx, .pptx, .odt, .ods, .odp) are indexed by their body text, extracted in pure PHP; PDF and the legacy
-binary Office formats arrive in later milestones, still with no external service and no external binary.]]></description>
+operate Elasticsearch to get full text search.
+
+Plain text, the OOXML and ODF office formats (.docx, .xlsx, .pptx, .odt, .ods, .odp), PDF and the legacy
+binary Office formats (.doc, .xls, .ppt) are indexed by their body text, extracted in pure PHP — no
+external service, no external binary. Extraction runs over streams under a memory budget, and a document
+that cannot be read whole is still indexed on what was recovered, with the reason counted on the admin
+card.]]></description>
 	<version>1.0.0</version>
-	<licence>agpl</licence>
+	<licence>AGPL-3.0-or-later</licence>
 	<author>Néfix Estrada</author>
 	<namespace>FtsSql</namespace>
+	<documentation>
+		<user>https://github.com/nefixestrada/fts_sql/blob/main/README.md</user>
+		<admin>https://github.com/nefixestrada/fts_sql/blob/main/docs/admin.md</admin>
+		<developer>https://github.com/nefixestrada/fts_sql/blob/main/DESIGN.md</developer>
+	</documentation>
 	<category>search</category>
+	<website>https://github.com/nefixestrada/fts_sql</website>
 	<bugs>https://github.com/nefixestrada/fts_sql/issues</bugs>
+	<repository>https://github.com/nefixestrada/fts_sql.git</repository>
+	<screenshot>https://raw.githubusercontent.com/nefixestrada/fts_sql/main/img/screenshot-search-results.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/nefixestrada/fts_sql/main/img/screenshot-admin-settings.png</screenshot>
 	<dependencies>
 		<php min-version="8.2"/>
 		<database min-version="14">pgsql</database>

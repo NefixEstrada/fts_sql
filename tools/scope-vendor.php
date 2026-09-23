@@ -80,6 +80,11 @@ if (!is_dir(dirname($target)) && !mkdir(dirname($target), 0755, true)) {
 if (!is_dir($output) || !rename($output, $target)) {
 	scoping_error('cannot move ' . $output . ' to ' . $target);
 }
+// php-scoper's parent of the moved output stays behind as an empty build/.
+// rmdir only acts on an empty directory, so a dev tree that keeps its own
+// build/artifacts there is untouched by construction — and a release
+// staging, where the dir holds nothing else, stops shipping it in the tar.
+@rmdir($root . '/build');
 
 // 2. reshape the vendor layout into namespace-shaped paths
 scoping_organize($target, $names);

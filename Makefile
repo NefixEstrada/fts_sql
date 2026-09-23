@@ -7,14 +7,17 @@ version := $(shell sed -n 's:.*<version>\(.*\)</version>.*:\1:p' appinfo/info.xm
 build_dir := build
 artifact := $(build_dir)/artifacts/$(app_name)-$(version).tar.gz
 
-.PHONY: all build check-manifest scope-selftest appstore clean
+.PHONY: all build check-manifest scope-selftest appstore certificate l10n ci-setup ci-engine ci-all clean
 
 all: build
 
-# No frontend to build yet: the app's only UI is the admin card inside the
-# fulltextsearch settings section, which arrives with the platform work. When
-# it does, this target goes back to `npm ci && npm run build`.
+# The admin card's Vue frontend: built into js/ and css/ before anything is
+# packaged or served, because the build empties both directories first and
+# `make appstore` rsyncs from the working tree (the built files are not all
+# tracked; see .gitignore).
 build:
+	npm ci
+	npm run build
 
 # Validate appinfo/info.xml against the app store schema (needs xmllint: libxml2-utils on
 # Debian/Ubuntu, preinstalled on macOS). Also catches TODO placeholders left by rename.sh.
@@ -49,6 +52,42 @@ appstore: check-manifest build
 	tar -czf $(artifact) -C $(build_dir) $(app_name)
 	@echo "$(artifact)"
 	@tar -tzf $(artifact) | grep -cE '\.(php|mjs|css|xml)$$' | xargs printf '%s runtime files packaged\n'
+
+# The app store accepts only signed archives. The certificate comes from a PR
+# to nextcloud/app-certificate-requests; this generates the key pair and the
+# CSR that PR carries. The key lands in build/ — ignored by git — and never
+# in the repository; see docs/releasing.md for the signing steps.
+certificate:
+	mkdir -p $(build_dir)
+	openssl req -new -newkey rsa:4096 -nodes \
+		-keyout $(build_dir)/$(app_name).key -out $(build_dir)/$(app_name).csr \
+		-subj "/CN=$(app_name)"
+	@echo "PR $(build_dir)/$(app_name).csr to nextcloud/app-certificate-requests; keep $(build_dir)/$(app_name).key secret"
+
+# The official translation flow: the pot regenerated from the sources with
+# the server's own tool (downloaded on first use — it lives in
+# nextcloud/docker-ci now, not the server checkout), then the .po files of
+# translationfiles/ converted into the l10n/ the tarball ships. Needs GNU
+# gettext (xgettext) on PATH — the flake provides it.
+L10N_TOOL ?= $(build_dir)/translationtool.phar
+L10N_TOOL_URL ?= https://raw.githubusercontent.com/nextcloud/docker-ci/master/translations/translationtool/translationtool.phar
+l10n:
+	mkdir -p $(build_dir)
+	[ -f $(L10N_TOOL) ] || curl -sfL $(L10N_TOOL_URL) -o $(L10N_TOOL)
+	php $(L10N_TOOL) create-pot-files
+	php $(L10N_TOOL) convert-po-files
+
+# The engines matrix of .github/workflows/tests.yml, on this machine — the
+# verbs of tests/integration-env.sh (run inside `nix develop`). setup once,
+# then one engine (ENGINE=sqlite|pgsql|mariadb|mysql) or all four.
+ci-setup:
+	tests/integration-env.sh setup
+
+ci-engine:
+	tests/integration-env.sh run $(ENGINE)
+
+ci-all:
+	tests/integration-env.sh run-all
 
 clean:
 	rm -rf $(build_dir) node_modules vendor

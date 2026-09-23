@@ -1,0 +1,34 @@
+version = 1
+SPDX-PackageName = "fts_sql"
+SPDX-PackageDownloadLocation = "https://github.com/NefixEstrada/fts_sql"
+
+# Diffs against the upstream workflow templates cannot carry inline SPDX
+# headers: every added line is template content or a delta of it.
+[[annotations]]
+path = ".github/workflows/*.patch"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Néfix Estrada"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# Files that cannot carry inline headers: measured data (benchmark/results),
+# machine-maintained manifests and locks, the generated API specification and
+# its generated TypeScript types, and the settings screenshot.
+[[annotations]]
+path = [
+	"benchmark/results/*.json",
+	"composer.json",
+	"flake.lock",
+	"img/*.png",
+	"l10n/*",
+	"openapi.json",
+	"package-lock.json",
+	"package.json",
+	"src/types/openapi/*.ts",
+	"translationfiles/**",
+	"tsconfig.json",
+	"vendor-bin/openapi-extractor/composer.json",
+	"vendor-bin/php-scoper/composer.json",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Néfix Estrada"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
