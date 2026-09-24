@@ -28,8 +28,8 @@
 -          if [[ "$BRANCH_NAME" == 'main' ]]; then
 -            PACKAGE_VERSION='nextcloud/ocp:dev-master'
 -          fi
-+          # The OCP branch the manifest pins — this app supports stable34,
-+          # not master — the same derivation the local mirror makes.
++          # The OCP branch the manifest floor pins — stable34 while that is
++          # the minimum, never master — as the local mirror derives it.
 +          STABLE="stable$(grep -oP '(?<=<nextcloud min-version=")[0-9]+' appinfo/info.xml)"
 +          PACKAGE_VERSION="nextcloud/ocp:dev-$STABLE"
  

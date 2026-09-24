@@ -9,6 +9,25 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 All notable changes to FTS SQL are documented here. The format follows
 [Keep a Changelog]; the versions follow [Semantic Versioning].
 
+## [Unreleased]
+
+### Added
+
+- Nextcloud 35 support: the manifest now pins majors 34–35. Checked
+  against the 35 upgrade notes point by point — the PHP 8.3 server
+  floor (the app keeps its own 8.2 floor so 34 installs keep updating),
+  Symfony Console 7, the `OCP\DB\Schema` wrapper, the removed front-end
+  globals and the removed Remote/preview APIs — nothing the app or the
+  card uses was removed, and files_fulltextsearch 35 still fires its
+  extension events as `GenericEvent`, so the streaming fast path
+  registers exactly as on 34.
+
+### Changed
+
+- The CI's framework checkout falls back to the app's default branch
+  while `fulltextsearch` has not cut its `stableNN` branch — it cuts
+  its branches after the server cuts its own.
+
 ## [1.0.0] - 2026-09-23
 
 The first public release — milestones 1–4 of DESIGN.md.

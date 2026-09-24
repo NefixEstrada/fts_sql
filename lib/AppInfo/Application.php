@@ -25,8 +25,9 @@ use OCP\IDBConnection;
  * The platform itself is declared in info.xml, not here — the listener is the
  * one registration beyond the lexicon: the streaming fast path (DESIGN.md,
  * "Open issue: where extraction plugs in", option (b)) plugs in at the files
- * provider's indexing event, and on Nextcloud 34 that event is a GenericEvent
- * delivered by class name, so that is what the registration listens on.
+ * provider's indexing event, and on Nextcloud 34 and 35 that event is a
+ * GenericEvent delivered by class name, so that is what the registration
+ * listens on.
  */
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'fts_sql';
@@ -43,10 +44,11 @@ class Application extends App implements IBootstrap {
 		$context->registerConfigLexicon(ConfigLexicon::class);
 		/**
 		 * @psalm-suppress DeprecatedClass GenericEvent is what
-		 *                files_fulltextsearch 34 still dispatches its
-		 *                extension events as, delivered by class name —
-		 *                subject-name listeners never fire (measured against
-		 *                34.0.4); the listener filters the subject itself
+		 *                files_fulltextsearch 34 and 35 still dispatch
+		 *                its extension events as, delivered by class
+		 *                name — subject-name listeners never fire
+		 *                (measured against 34.0.4); the listener
+		 *                filters the subject itself
 		 */
 		$context->registerEventListener(GenericEvent::class, FilesIndexingListener::class);
 	}

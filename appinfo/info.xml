@@ -38,7 +38,7 @@ card.]]></description>
 		<database min-version="14">pgsql</database>
 		<database>mysql</database>
 		<database>sqlite</database>
-		<nextcloud min-version="34" max-version="34"/>
+		<nextcloud min-version="34" max-version="35"/>
 	</dependencies>
 	<repair-steps>
 		<post-migration>

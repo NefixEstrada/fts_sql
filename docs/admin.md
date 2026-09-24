@@ -58,14 +58,14 @@ less surgically.
 
 ## Upgrading Nextcloud
 
-Three deliberate dependencies on this server major are watched by tests,
-so an upgrade that breaks any of them fails loudly in the integration
-suite instead of silently in production:
+Three deliberate dependencies on the supported server majors are
+watched by tests, so an upgrade that breaks any of them fails loudly in
+the integration suite instead of silently in production:
 
 - **The streaming fast path** listens on `GenericEvent` delivered by
-  class name, because that is how files_fulltextsearch 34 fires its
-  extension events (subject-name listeners never fire; measured against
-  34.0.4). `tests/integration/Listener/FilesIndexingListenerTest.php`
+  class name, because that is how files_fulltextsearch 34 and 35 fire
+  their extension events (subject-name listeners never fire; measured
+  against 34.0.4, read off 35's ExtensionService). `tests/integration/Listener/FilesIndexingListenerTest.php`
   dispatches the provider's own event, the same way, against a real node.
 - **The platform adapter** rebuilds `OC\FullTextSearch\Model\*` objects —
   server-internal classes `OCP` does not carry — the same de-facto route

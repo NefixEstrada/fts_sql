@@ -9,7 +9,7 @@
      permissions:
        contents: read
        pull-requests: read
-@@ -103,6 +103,14 @@
+@@ -103,6 +103,20 @@
            persist-credentials: false
            path: apps/${{ env.APP_NAME }}
  
@@ -18,8 +18,14 @@
 +      # installed would leave the platform unreachable.
 +      - name: Checkout fulltextsearch apps
 +        run: |
-+          git clone --depth 1 -b ${{ matrix.server-versions }} https://github.com/nextcloud/fulltextsearch.git apps/fulltextsearch
-+          git clone --depth 1 -b ${{ matrix.server-versions }} https://github.com/nextcloud/files_fulltextsearch.git apps/files_fulltextsearch
++          # fulltextsearch cuts its stableNN branches after the server cuts
++          # its own; while the branch is missing the app's default branch is
++          # that same server version (its manifest pins one minor at a time).
++          # A failed -b clone leaves nothing behind, so the fallback is safe.
++          for repo in fulltextsearch files_fulltextsearch; do
++            git clone --depth 1 -b ${{ matrix.server-versions }} "https://github.com/nextcloud/$repo.git" "apps/$repo" \
++              || git clone --depth 1 "https://github.com/nextcloud/$repo.git" "apps/$repo"
++          done
 +
        - name: Set up php ${{ matrix.php-versions }}
          uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2

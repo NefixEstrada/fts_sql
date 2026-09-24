@@ -37,7 +37,7 @@ The admin card, in the framework's own Full text search settings section:
 
 ## Requirements
 
-- Nextcloud 34 with PHP 8.2 — the floors the integration matrix
+- Nextcloud 34 or 35 with PHP 8.2 — the floors the integration matrix
   measures; the manifest pins the majors the app has been tested on.
 - One of PostgreSQL 14+, MySQL/MariaDB, or SQLite built with the FTS5
   extension (the standard distributions' builds carry it; the app probes

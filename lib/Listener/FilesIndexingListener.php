@@ -35,10 +35,11 @@ use OCP\FullTextSearch\Model\IIndexDocument;
  * other document still arrives base64 through indexDocument(), which stays
  * correct for every provider (option (a) keeps working underneath).
  *
- * On Nextcloud 34 this event is a GenericEvent delivered by CLASS name, not
- * by its subject: subject-name listeners never fire (measured against
- * 34.0.4), so the registration listens on GenericEvent and the subject
- * filter lives here, first thing.
+ * On Nextcloud 34 and 35 this event is a GenericEvent delivered by CLASS
+ * name, not by its subject: subject-name listeners never fire (measured
+ * against 34.0.4; 35's ExtensionService dispatches the same GenericEvent),
+ * so the registration listens on GenericEvent and the subject filter lives
+ * here, first thing.
  */
 /**
  * @psalm-suppress MissingTemplateParam bare IEventListener on purpose: the
