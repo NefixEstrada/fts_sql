@@ -29,14 +29,12 @@ namespace OCA\FtsSql\Model;
 final class SearchQuery {
 	public const MAX_TERMS = 64;
 
-	/** @var list<QueryTerm> */
-	private readonly array $terms;
-
 	/**
 	 * @param list<QueryTerm> $terms
 	 */
-	private function __construct(array $terms) {
-		$this->terms = $terms;
+	private function __construct(
+		private readonly array $terms,
+	) {
 	}
 
 	public static function parse(string $query): self {

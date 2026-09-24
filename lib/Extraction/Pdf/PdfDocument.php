@@ -46,7 +46,6 @@ final class PdfDocument {
 	private const CATALOG_SEARCH = 64;
 	private const MAX_CACHED_FONTS = 256;
 
-	public readonly string $data;
 	/** @var array<string, mixed> the trailer dict, or [] when there was none to read */
 	public readonly array $trailer;
 	public readonly bool $encrypted;
@@ -93,9 +92,9 @@ final class PdfDocument {
 		return new self($data);
 	}
 
-	private function __construct(string $data) {
-		$this->data = $data;
-
+	private function __construct(
+		public readonly string $data,
+	) {
 		$trailer = [];
 		$encrypted = false;
 		$offset = self::findStartxref($data);

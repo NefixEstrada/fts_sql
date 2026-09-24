@@ -27,6 +27,9 @@ All notable changes to FTS SQL are documented here. The format follows
 - The CI's framework checkout falls back to the app's default branch
   while `fulltextsearch` has not cut its `stableNN` branch — it cuts
   its branches after the server cuts its own.
+- The value models are `readonly` classes and the services' injected
+  dependencies are `readonly` constructor parameters; the last four
+  hand-written constructor assignments promote their properties.
 
 ## [1.0.0] - 2026-09-23
 

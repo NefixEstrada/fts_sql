@@ -15,10 +15,10 @@ namespace OCA\FtsSql\Extraction\Pdf;
  * when it has any. Stream-bearing objects are never cached, so the
  * memory a document costs is the page being read, not the file.
  */
-final class PdfIndirect {
+final readonly class PdfIndirect {
 	public function __construct(
-		public readonly mixed $value,
-		public readonly ?string $stream,
+		public mixed $value,
+		public ?string $stream,
 	) {
 	}
 }

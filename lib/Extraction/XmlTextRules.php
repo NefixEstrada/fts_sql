@@ -25,7 +25,7 @@ namespace OCA\FtsSql\Extraction;
  *    spreadsheets' inline strings live in is/t, ODF's body text in p/h —
  *    while leaves and paragraph ends keep working everywhere.
  */
-final class XmlTextRules {
+final readonly class XmlTextRules {
 	/**
 	 * @param list<string> $skip
 	 * @param list<string> $paragraphEnd
@@ -33,10 +33,10 @@ final class XmlTextRules {
 	 * @param ?list<string> $inside
 	 */
 	public function __construct(
-		public readonly array $skip,
-		public readonly array $paragraphEnd,
-		public readonly array $leaf,
-		public readonly ?array $inside,
+		public array $skip,
+		public array $paragraphEnd,
+		public array $leaf,
+		public ?array $inside,
 	) {
 	}
 

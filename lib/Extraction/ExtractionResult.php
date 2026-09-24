@@ -21,11 +21,11 @@ namespace OCA\FtsSql\Extraction;
  * contentError: text is stored whenever it is not null (INDEX_CONTENT set),
  * and a cause is always reported alongside it (ERROR_SEV_1).
  */
-final class ExtractionResult {
+final readonly class ExtractionResult {
 	public function __construct(
-		public readonly ?string $text,
-		public readonly ?ExtractionCause $cause,
-		public readonly string $message,
+		public ?string $text,
+		public ?ExtractionCause $cause,
+		public string $message,
 	) {
 	}
 

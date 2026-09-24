@@ -16,10 +16,10 @@ namespace OCA\FtsSql\Extraction\Pdf;
  * extractor is exactly that a reference is followed only when the page
  * being read names it.
  */
-final class PdfRef {
+final readonly class PdfRef {
 	public function __construct(
-		public readonly int $object,
-		public readonly int $generation,
+		public int $object,
+		public int $generation,
 	) {
 	}
 }

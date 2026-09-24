@@ -14,9 +14,9 @@ namespace OCA\FtsSql\Extraction\Pdf;
  * A PDF name (after a slash), kept distinct from a literal string:
  * /FlateDecode is a filter name, not text.
  */
-final class PdfName {
+final readonly class PdfName {
 	public function __construct(
-		public readonly string $name,
+		public string $name,
 	) {
 	}
 }

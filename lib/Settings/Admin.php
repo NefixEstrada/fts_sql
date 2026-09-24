@@ -36,12 +36,12 @@ use OCP\Util;
  */
 final class Admin implements ISettings {
 	public function __construct(
-		private BackendFactory $factory,
-		private ConfigService $config,
-		private SearchService $searchService,
-		private IndexService $indexService,
-		private IInitialState $initialState,
-		private IL10N $l10n,
+		private readonly BackendFactory $factory,
+		private readonly ConfigService $config,
+		private readonly SearchService $searchService,
+		private readonly IndexService $indexService,
+		private readonly IInitialState $initialState,
+		private readonly IL10N $l10n,
 	) {
 	}
 

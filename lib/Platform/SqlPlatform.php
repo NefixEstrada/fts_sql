@@ -40,11 +40,11 @@ class SqlPlatform implements IFullTextSearchPlatform {
 	private ?IRunner $runner = null;
 
 	public function __construct(
-		private ConfigService $config,
-		private BackendFactory $factory,
-		private IndexService $indexService,
-		private SearchService $searchService,
-		private LoggerInterface $logger,
+		private readonly ConfigService $config,
+		private readonly BackendFactory $factory,
+		private readonly IndexService $indexService,
+		private readonly SearchService $searchService,
+		private readonly LoggerInterface $logger,
 	) {
 	}
 

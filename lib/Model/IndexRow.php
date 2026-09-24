@@ -22,29 +22,29 @@ use OCA\FtsSql\Extraction\ExtractionCause;
  * outcome: it is what the admin card counts per flag, null when extraction
  * completed (a provider bug is a severity, not a cause).
  */
-final class IndexRow {
+final readonly class IndexRow {
 	/**
 	 * @param list<string> $tokens the access tokens, from DocumentAccess
 	 * @param list<array{kind: string, value: string}> $tags kind 'meta' carries the source checkboxes
 	 */
 	public function __construct(
-		public readonly string $providerId,
-		public readonly string $documentId,
-		public readonly ?string $owner,
-		public readonly ?string $title,
-		public readonly ?string $content,
-		public readonly ?string $link,
-		public readonly ?string $source,
-		public readonly int $modified,
-		public readonly ?string $hash,
+		public string $providerId,
+		public string $documentId,
+		public ?string $owner,
+		public ?string $title,
+		public ?string $content,
+		public ?string $link,
+		public ?string $source,
+		public int $modified,
+		public ?string $hash,
 		/** @var list<string> */
-		public readonly array $tokens,
+		public array $tokens,
 		/** @var list<array{kind: string, value: string}> */
-		public readonly array $tags,
-		public readonly bool $contentExtracted,
-		public readonly ?string $contentError,
-		public readonly ?ExtractionCause $cause = null,
-		public readonly int $contentErrorSeverity = 0,
+		public array $tags,
+		public bool $contentExtracted,
+		public ?string $contentError,
+		public ?ExtractionCause $cause = null,
+		public int $contentErrorSeverity = 0,
 	) {
 	}
 }

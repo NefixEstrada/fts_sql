@@ -23,17 +23,15 @@ final class PdfFont {
 	private const CMAP_CAP = 1048576;
 	private const MAX_MAPPINGS = 65536;
 
-	/** @var array<int, string>|null code to UTF-8 from /ToUnicode */
-	private readonly ?array $toUnicode;
-	private readonly int $codeBytes;
-	private readonly bool $decodable;
-	private readonly array $table;
-
-	private function __construct(?array $toUnicode, int $codeBytes, bool $decodable, array $table) {
-		$this->toUnicode = $toUnicode;
-		$this->codeBytes = $codeBytes;
-		$this->decodable = $decodable;
-		$this->table = $table;
+	/**
+	 * @param array<int, string>|null $toUnicode code to UTF-8 from /ToUnicode
+	 */
+	private function __construct(
+		private readonly ?array $toUnicode,
+		private readonly int $codeBytes,
+		private readonly bool $decodable,
+		private readonly array $table,
+	) {
 	}
 
 	/**
