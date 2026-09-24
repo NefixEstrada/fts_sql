@@ -27,6 +27,12 @@ All notable changes to FTS SQL are documented here. The format follows
 - The CI's framework checkout falls back to the app's default branch
   while `fulltextsearch` has not cut its `stableNN` branch — it cuts
   its branches after the server cuts its own.
+- Every dependency that could move moved: the card's npm set (notably
+  `@nextcloud/vue` 9.13 and `vue` 3.5.43) and the dev shell's nixpkgs
+  (which still ships PHP 8.2, so the manifest floor stays guarded).
+  TypeScript stays 5.9 on purpose: the native 7 no longer exports the
+  JS API `vue-tsc` still resolves, and bumping would leave the card
+  without a typecheck.
 - The value models are `readonly` classes and the services' injected
   dependencies are `readonly` constructor parameters; the last four
   hand-written constructor assignments promote their properties.
