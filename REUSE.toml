@@ -12,12 +12,14 @@ SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 # Files that cannot carry inline headers: measured data (benchmark/results),
 # machine-maintained manifests and locks, the generated API specification and
-# its generated TypeScript types, and the settings screenshot.
+# its generated TypeScript types, the settings screenshot, and the release
+# certificate (PEM, parsed by the app store).
 [[annotations]]
 path = [
 	"benchmark/results/*.json",
 	"composer.json",
 	"flake.lock",
+	"fts_sql.crt",
 	"img/*.png",
 	"l10n/*",
 	"openapi.json",
