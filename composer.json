@@ -5,6 +5,9 @@
     "type": "project",
     "config": {
         "optimize-autoloader": true,
+        "platform": {
+            "php": "8.2.27"
+        },
         "sort-packages": true,
         "allow-plugins": {
             "bamarni/composer-bin-plugin": true
@@ -15,6 +18,9 @@
         "bamarni/composer-bin-plugin": "^1.8",
         "phpoffice/phppresentation": "^1.2",
         "phpoffice/phpword": "^1.0"
+    },
+    "conflict": {
+        "phpoffice/phpspreadsheet": "<3.10.7 || >=4.0 <5.8.1"
     },
     "require-dev": {
         "nextcloud/coding-standard": "^1.4",

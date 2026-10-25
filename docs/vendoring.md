@@ -19,6 +19,17 @@ ride today — `phpoffice/phpword` and `phpoffice/phppresentation`, the
 `.doc`, `.xls` and `.ppt` readers — and the pipeline carries them scoped
 into `lib/Vendor`.
 
+`composer.lock` is committed — the root one and each bin's — and
+resolved for the PHP floor, so a release bundles exactly the versions
+the tree was tested with. The root `config.platform.php` is 8.2.27, not
+8.2: the oldest 8.2 release Psalm accepts. Refreshing it is
+where a bad version can still slip in: a Composer older than 2.9 does
+not skip versions with security advisories, and phppresentation admits
+`phpoffice/phpspreadsheet` ^4, a line with no patched release. The
+`conflict` in composer.json keeps any resolution on the patched 3.10
+line; CI's `vendor-scoping` audits the committed lock, then resolves
+again with blocking off and fails on any advisory.
+
 The pipeline (`tools/scope-vendor.php`) runs after every
 `composer install` and `update`, so development and release see the same
 code shape; with no runtime dependency required it is a no-op that

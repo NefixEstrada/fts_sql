@@ -37,14 +37,14 @@ scope-selftest:
 # top-level directory named after the app id (what the app store and occ expect).
 # Runtime dependencies are scoped inside the staged copy — the same post-install
 # hook the dev tree runs — so the tarball never depends on the state of the
-# working tree's vendor/: composer.json, the scoping tools and the php-scoper
-# bin are staged in, `composer install --no-dev` runs the pipeline there, and
-# the staging goes out again before the tar.
+# working tree's vendor/: composer.json and its lock, the scoping tools and
+# the php-scoper bin are staged in, `composer install --no-dev` runs the
+# pipeline there, and the staging goes out again before the tar.
 appstore: check-manifest build
 	rm -rf $(build_dir)/$(app_name)
 	mkdir -p $(build_dir)/artifacts $(build_dir)/$(app_name)
 	rsync -a --exclude-from=.nextcloudignore ./ $(build_dir)/$(app_name)/
-	rsync -a composer.json vendor-bin tools scoper.inc.php $(build_dir)/$(app_name)/
+	rsync -a composer.json composer.lock vendor-bin tools scoper.inc.php $(build_dir)/$(app_name)/
 	composer install --no-dev -o --no-interaction --working-dir=$(build_dir)/$(app_name)
 	rm -rf $(build_dir)/$(app_name)/composer.json $(build_dir)/$(app_name)/composer.lock \
 		$(build_dir)/$(app_name)/vendor $(build_dir)/$(app_name)/vendor-bin \

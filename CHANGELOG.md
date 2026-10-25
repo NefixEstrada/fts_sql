@@ -37,6 +37,17 @@ All notable changes to FTS SQL are documented here. The format follows
   dependencies are `readonly` constructor parameters; the last four
   hand-written constructor assignments promote their properties.
 
+### Security
+
+- `composer.lock` was gitignored, so every release resolved afresh: one
+  built with a Composer older than 2.9 — which does not skip versions
+  with advisories — would have bundled `phpoffice/phpspreadsheet`
+  4.5.0, under nine open advisories (phppresentation admits the 4
+  line, which has no patched release). The locks are now committed,
+  resolved for PHP 8.2; composer.json conflicts with every affected
+  version; and CI audits the committed lock and a refresh resolved
+  with advisory blocking off.
+
 ## [1.0.0] - 2026-09-23
 
 The first public release — milestones 1–4 of DESIGN.md.

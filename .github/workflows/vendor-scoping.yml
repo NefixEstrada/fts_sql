@@ -49,6 +49,20 @@ jobs:
       - name: Composer validate
         run: composer validate --no-check-publish
 
+      # The committed lock is what a release bundles.
+      - name: Audit the committed lock
+        run: composer audit --locked
+
+      # A Composer older than 2.9 refreshing the lock does not block versions
+      # with advisories: resolve the way it would, audit, and put the
+      # committed lock back for the steps below.
+      - name: Lock refresh without advisory blocking
+        run: |
+          cp composer.lock "$RUNNER_TEMP/composer.lock"
+          composer update --no-blocking --no-install --no-scripts --no-plugins --no-audit
+          composer audit --locked
+          cp "$RUNNER_TEMP/composer.lock" composer.lock
+
       - name: Install dependencies
         run: composer install
 

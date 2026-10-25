@@ -18,6 +18,7 @@ SPDX-License-Identifier = "AGPL-3.0-or-later"
 path = [
 	"benchmark/results/*.json",
 	"composer.json",
+	"composer.lock",
 	"flake.lock",
 	"fts_sql.crt",
 	"img/*.png",
@@ -29,7 +30,9 @@ path = [
 	"translationfiles/**",
 	"tsconfig.json",
 	"vendor-bin/openapi-extractor/composer.json",
+	"vendor-bin/openapi-extractor/composer.lock",
 	"vendor-bin/php-scoper/composer.json",
+	"vendor-bin/php-scoper/composer.lock",
 ]
 precedence = "override"
 SPDX-FileCopyrightText = "2026 Néfix Estrada"
