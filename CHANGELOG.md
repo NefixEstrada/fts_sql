@@ -33,6 +33,9 @@ All notable changes to FTS SQL are documented here. The format follows
   TypeScript stays 5.9 on purpose: the native 7 no longer exports the
   JS API `vue-tsc` still resolves, and bumping would leave the card
   without a typecheck.
+- A second dependency round: `vue` 3.5.44, `vite` 7.3.7, php-scoper
+  0.18.20, nixpkgs of 2026-10-15 (PHP 8.2.34), and the CI workflows
+  synced with the current Nextcloud templates.
 - The value models are `readonly` classes and the services' injected
   dependencies are `readonly` constructor parameters; the last four
   hand-written constructor assignments promote their properties.
