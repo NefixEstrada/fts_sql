@@ -16,7 +16,8 @@
 #
 # Run it inside the flake (`nix develop`): it needs php, composer, git, rsync
 # and flock on PATH. NEXTCLOUD_SERVER_PATH moves the checkout (default: a
-# sibling of this repository).
+# sibling of this repository); NEXTCLOUD_SERVER_BRANCH picks the server
+# branch (default: the manifest's min-version).
 #
 # The app reaches the checkout as a COPY, refreshed on every run — not a
 # symlink — because the workflow's own dependency step mutates the app
@@ -59,9 +60,14 @@ engine_facts() {
 	esac
 }
 
-# The server branch to test against is the one the manifest declares, the
-# same pin the workflow's checkout step hard-codes.
+# The server branch defaults to the manifest's min-version; the workflows
+# test its max-version (nextcloud-version-matrix's server-max), so a
+# widened range is proven here with NEXTCLOUD_SERVER_BRANCH=stable<max>.
 server_branch() {
+	if [ -n "${NEXTCLOUD_SERVER_BRANCH:-}" ]; then
+		echo "$NEXTCLOUD_SERVER_BRANCH"
+		return
+	fi
 	local min
 	min=$(grep -oP '(?<=<nextcloud min-version=")[0-9]+' "$APP_DIR/appinfo/info.xml")
 	echo "stable${min}"

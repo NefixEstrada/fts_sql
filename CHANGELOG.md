@@ -20,7 +20,9 @@ All notable changes to FTS SQL are documented here. The format follows
   globals and the removed Remote/preview APIs — nothing the app or the
   card uses was removed, and files_fulltextsearch 35 still fires its
   extension events as `GenericEvent`, so the streaming fast path
-  registers exactly as on 34.
+  registers exactly as on 34. Both ends of the range pass the
+  four-engine integration matrix: 34.0.5 on PHP 8.2 and 35.0.2 on
+  PHP 8.3.
 
 ### Changed
 

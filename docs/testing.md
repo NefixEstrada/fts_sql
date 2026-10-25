@@ -59,6 +59,18 @@ $ tests/integration-env.sh run pgsql    # sqlite | pgsql | mariadb | mysql
 $ tests/integration-env.sh run-all      # the four, with a summary
 ```
 
+The checkout follows the manifest's `min-version`; the workflows test
+its `max-version` instead. The other end of the range runs with
+`NEXTCLOUD_SERVER_BRANCH`, from the flake's PHP 8.3 shell when the
+server's own floor is 8.3 (Nextcloud 35's is), and in a checkout of its
+own so the two do not refetch each other:
+
+```console
+$ NEXTCLOUD_SERVER_BRANCH=stable35 \
+    NEXTCLOUD_SERVER_PATH=../nextcloud-server-integration-35 \
+    nix develop .#php83 -c tests/integration-env.sh run-all
+```
+
 Every run reinstalls from this tree and resets its engine's container, so
 nothing carries over between runs; the MySQL and MariaDB legs export the
 root DSN (`FTS_SQL_MYSQL_ROOT_DSN`) the catalogue integration test

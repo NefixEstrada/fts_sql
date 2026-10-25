@@ -21,17 +21,16 @@
           # nixpkgs still ships, so an accidental 8.3-ism fails in this shell and
           # not on a user's host. 8.2 is EOL upstream; when nixpkgs drops it the
           # shell moves to 8.3 and the manifest floor should be reconsidered.
-          phpBase = if pkgs ? php82 then pkgs.php82 else pkgs.php83;
-          php = phpBase.withExtensions ({ enabled, all }:
-            # intl is deliberately removed: DESIGN.md forbids depending on it, and
-            # an accidental use has to fail loudly here, where hosts that do ship
-            # intl cannot mask it. pdo_sqlite/sqlite3 stay in for FTS5 experiments
-            # against a scratch database.
-            (nixpkgs.lib.subtractLists [ all.intl ] enabled)
-            ++ (with all; [ pdo_sqlite sqlite3 ]));
-        in
-        {
-          default = pkgs.mkShell {
+          phpFloor = if pkgs ? php82 then pkgs.php82 else pkgs.php83;
+          shellFor = phpBase: let
+            php = phpBase.withExtensions ({ enabled, all }:
+              # intl is deliberately removed: DESIGN.md forbids depending on it, and
+              # an accidental use has to fail loudly here, where hosts that do ship
+              # intl cannot mask it. pdo_sqlite/sqlite3 stay in for FTS5 experiments
+              # against a scratch database.
+              (nixpkgs.lib.subtractLists [ all.intl ] enabled)
+              ++ (with all; [ pdo_sqlite sqlite3 ]));
+          in pkgs.mkShell {
             packages = [
               php
               phpBase.packages.composer
@@ -44,6 +43,12 @@
               pkgs.gnutar
             ];
           };
+        in
+        {
+          default = shellFor phpFloor;
+          # Nextcloud 35's own floor is PHP 8.3: the shell the integration
+          # matrix needs against stable35 (docs/testing.md).
+          php83 = shellFor pkgs.php83;
         });
 
       formatter = forAllSystems (system:
