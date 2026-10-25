@@ -9,7 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 All notable changes to FTS SQL are documented here. The format follows
 [Keep a Changelog]; the versions follow [Semantic Versioning].
 
-## [Unreleased]
+## [1.1.0] - 2026-10-25
 
 ### Added
 

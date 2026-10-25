@@ -18,7 +18,7 @@ binary Office formats (.doc, .xls, .ppt) are indexed by their body text, extract
 external service, no external binary. Extraction runs over streams under a memory budget, and a document
 that cannot be read whole is still indexed on what was recovered, with the reason counted on the admin
 card.]]></description>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>Néfix Estrada</author>
 	<namespace>FtsSql</namespace>
