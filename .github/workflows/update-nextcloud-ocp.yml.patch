@@ -20,7 +20,7 @@
  
      name: update-nextcloud-ocp-${{ matrix.branches }}
  
-@@ -88,10 +82,10 @@
+@@ -115,10 +109,10 @@
              COMPOSER_CMD='composer bin nextcloud-ocp'
            fi
  

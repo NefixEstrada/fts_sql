@@ -9,7 +9,7 @@
      permissions:
        contents: read
        pull-requests: read
-@@ -88,7 +88,7 @@
+@@ -85,7 +85,7 @@
    summary:
      permissions:
        contents: none
